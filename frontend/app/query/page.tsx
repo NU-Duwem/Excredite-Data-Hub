@@ -30,7 +30,7 @@ export default function AIQueryInterface() {
       setMessages(prev => [...prev, { 
         id: Date.now(), 
         role: 'assistant', 
-        content: 'This is a mock response based on your query. In a real scenario, this would connect to the FastAPI backend which interfaces with Claude and the PostgreSQL database to return data-backed insights.' 
+        content: 'This is a mock response based on your query. In a real scenario, this would connect to the Supabase backend which interfaces with Claude and the PostgreSQL database to return data-backed insights.' 
       }]);
       setIsSubmitting(false);
       responseTimeoutRef.current = null;
@@ -52,7 +52,7 @@ export default function AIQueryInterface() {
     <main className="flex-1 flex flex-col h-full bg-white relative">
       {/* Mobile Header (visible only on mobile) */}
       <div className="md:hidden h-16 flex items-center px-4 border-b border-gray-200 bg-white shadow-sm">
-        <button type="button" className="text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
+        <button type="button" className="text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand">
           <span className="sr-only">Open sidebar</span>
           <svg className="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -73,7 +73,7 @@ export default function AIQueryInterface() {
              <button
                type="button"
                onClick={handleNewConversation}
-               className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+               className="text-sm font-semibold text-brand hover:opacity-80 transition-all uppercase tracking-wide"
              >
                + New Conversation
              </button>
@@ -84,7 +84,7 @@ export default function AIQueryInterface() {
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] rounded-lg px-5 py-4 ${
                   msg.role === 'user' 
-                    ? 'bg-blue-600 text-white shadow-sm' 
+                    ? 'bg-brand text-white shadow-sm' 
                     : 'bg-gray-50 border border-gray-200 text-gray-900'
                 }`}>
                   <p className="text-[15px] leading-relaxed">{msg.content}</p>
@@ -112,9 +112,9 @@ export default function AIQueryInterface() {
             {isSubmitting && (
               <div className="flex justify-start">
                 <div className="bg-gray-50 border border-gray-200 rounded-lg px-5 py-4 flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                  <div className="w-2 h-2 bg-brand rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-brand rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-2 h-2 bg-brand rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
                   <span className="ml-2 text-sm text-gray-500 font-medium">Querying database...</span>
                 </div>
               </div>
@@ -139,14 +139,14 @@ export default function AIQueryInterface() {
                 }
               }}
               placeholder="E.g., What was the total generation output last week?"
-              className="block w-full resize-none rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-4 pl-4 pr-16 text-[15px] text-gray-900 border focus:bg-white transition-colors"
+              className="block w-full resize-none rounded-xl border-gray-300 shadow-sm focus:border-brand focus:ring-brand bg-gray-50 py-4 pl-4 pr-16 text-[15px] text-gray-900 border focus:bg-white transition-colors"
               style={{ minHeight: '56px', maxHeight: '150px' }}
               disabled={isSubmitting}
             />
             <button
               type="submit"
               disabled={!query.trim() || isSubmitting}
-              className="absolute right-2 inline-flex items-center justify-center p-2 rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="absolute right-2 inline-flex items-center justify-center p-2 rounded-lg text-white bg-brand hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
             >
               <svg className="h-5 w-5 rotate-90" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

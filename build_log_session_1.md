@@ -246,3 +246,99 @@ Built out the complete visual interface for all application routes to prevent 40
 ---
 
 *Session 2 complete. Frontend UI completely scaffolded, native compiler bugs resolved, and Supabase Auth connected.*
+
+---
+---
+
+# EPDH Build Log - Session 3
+
+**Date:** 15 May 2026  
+**Objective:** Frontend branding refinements, navigation fixes, and briefing note category controls  
+**Status:** Complete. UI refinements applied, active navigation fixed, new conversation reset wired, and briefing category select-all implemented.
+
+## What Was Done
+
+### Phase 1: Company Branding in Sidebar
+- Added the company logo to the sidebar brand area using the existing `public/Excredite_logo.png` asset.
+- Iterated on the brand layout based on visual feedback:
+  - Increased logo size progressively.
+  - Reduced and then adjusted the brand text size for better balance.
+  - Moved the logo above the company name.
+  - Centered both logo and text.
+  - Tightened the spacing between the logo and text.
+- Final sidebar brand treatment:
+  - Logo displayed at `88x88`.
+  - Brand block height set to `h-32`.
+  - Company name shown below the logo as `Excredite Power Data Hub`.
+
+### Phase 2: Sidebar Navigation Improvements
+- Reduced sidebar width from `w-64` to `w-56` to make the main workspace feel less cramped.
+- Fixed the active page indicator, which was previously hardcoded on **AI Query Interface**.
+- Refactored the sidebar navigation into a `navItems` array.
+- Active state now uses `usePathname()` so each sidebar item highlights correctly when its route is active:
+  - `/query`
+  - `/history`
+  - `/briefing`
+  - `/alerts`
+  - `/documents`
+  - `/forecasts`
+  - `/matters`
+
+### Phase 3: AI Query Interface Refinements
+- Updated the AI Query Interface subtitle:
+  - From: `Ask questions in plain English about generation, tariffs, or regulations.`
+  - To: `Ask questions about generation, tariffs, or regulations.`
+- Wired the **+ New Conversation** button.
+- New conversation behavior now:
+  - Clears the current message thread.
+  - Clears the typed query.
+  - Cancels any pending mock response timeout.
+  - Restores the initial assistant greeting.
+
+### Phase 4: Briefing Note Data Category Controls
+- Added a **Select all** checkbox to the Briefing Note Generator data categories.
+- The master checkbox now:
+  - Selects all categories when checked.
+  - Clears all categories when unchecked.
+  - Automatically appears checked only when every individual category is selected.
+- Existing category toggles remain functional.
+
+### Phase 5: Logout Button Attempt and Revert
+- Built a functional logout button prototype in the sidebar using `supabase.auth.signOut()`.
+- Added temporary loading and error handling behavior for sign-out.
+- Reverted the logout button and its logic after review, restoring the previous simple profile footer.
+- No logout button is currently retained in the frontend.
+
+## Files Modified
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `frontend/app/components/Sidebar.tsx` | Modified | Added and refined logo layout, reduced sidebar width, fixed route-based active navigation, and reverted logout prototype. |
+| `frontend/app/query/page.tsx` | Modified | Updated subtitle text and implemented functioning New Conversation reset logic. |
+| `frontend/app/briefing/page.tsx` | Modified | Added Select all control for briefing note data categories. |
+
+## Verification
+
+Ran:
+
+```bash
+npm.cmd run lint
+```
+
+Result:
+- ESLint completed with **0 errors**.
+- Existing unrelated warnings remain:
+  - `frontend/app/documents/page.tsx`: unused `isUploading`, `setIsUploading`
+  - `frontend/app/login/page.tsx`: unused `err`
+  - `frontend/utils/supabase/server.ts`: unused `CookieOptions`
+
+## Current Frontend Notes
+
+- Supabase client utilities exist and login uses `signInWithPassword`.
+- The app pages are still mostly mock/local-state driven.
+- No `.env.local` file was found in the current local workspace during inspection, despite Session 2 noting one had been created.
+- No Git repository was detected in this extracted project folder, so changes are being tracked manually through this build log rather than Git commits.
+
+---
+
+*Session 3 complete. Branding, navigation, AI query reset behavior, and briefing category controls updated.*

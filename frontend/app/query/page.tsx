@@ -1,15 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+
+const initialMessage = {
+  id: 1,
+  role: 'assistant',
+  content: 'Hello. I am the Excredite Power Data Hub AI. How can I assist you with power sector analytics today?',
+};
 
 export default function AIQueryInterface() {
   const [query, setQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const responseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Mock conversation state
-  const [messages, setMessages] = useState([
-    { id: 1, role: 'assistant', content: 'Hello. I am the Excredite Power Data Hub AI. How can I assist you with power sector analytics today?' }
-  ]);
+  const [messages, setMessages] = useState([initialMessage]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,14 +26,26 @@ export default function AIQueryInterface() {
     setIsSubmitting(true);
 
     // Mock AI response delay
-    setTimeout(() => {
+    responseTimeoutRef.current = setTimeout(() => {
       setMessages(prev => [...prev, { 
         id: Date.now(), 
         role: 'assistant', 
         content: 'This is a mock response based on your query. In a real scenario, this would connect to the FastAPI backend which interfaces with Claude and the PostgreSQL database to return data-backed insights.' 
       }]);
       setIsSubmitting(false);
+      responseTimeoutRef.current = null;
     }, 1500);
+  };
+
+  const handleNewConversation = () => {
+    if (responseTimeoutRef.current) {
+      clearTimeout(responseTimeoutRef.current);
+      responseTimeoutRef.current = null;
+    }
+
+    setQuery('');
+    setIsSubmitting(false);
+    setMessages([{ ...initialMessage }]);
   };
 
   return (
@@ -51,9 +68,13 @@ export default function AIQueryInterface() {
           <div className="flex justify-between items-end mb-8">
              <div>
                <h1 className="text-2xl font-semibold text-gray-900">AI Query Interface</h1>
-               <p className="mt-1 text-sm text-gray-500">Ask questions in plain English about generation, tariffs, or regulations.</p>
+               <p className="mt-1 text-sm text-gray-500">Ask questions about generation, tariffs, or regulations.</p>
              </div>
-             <button className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">
+             <button
+               type="button"
+               onClick={handleNewConversation}
+               className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+             >
                + New Conversation
              </button>
           </div>
@@ -133,7 +154,7 @@ export default function AIQueryInterface() {
             </button>
           </form>
           <div className="text-center mt-2">
-            <p className="text-xs text-gray-400">AI responses are based on the Excredite PostgreSQL database. Verify important data.</p>
+            <p className="text-xs text-gray-400">AI responses are based on the Excredite Consulting Limited database.</p>
           </div>
         </div>
       </div>

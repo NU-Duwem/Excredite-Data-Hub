@@ -15,6 +15,7 @@ export default function BriefingNoteGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [briefingText, setBriefingText] = useState<string | null>(null);
   const [progressMsg, setProgressMsg] = useState('');
+  const allCategoriesSelected = Object.values(categories).every(Boolean);
 
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,14 +66,24 @@ NERC issued two minor enforcement actions regarding load rejection during this p
     setCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
 
+  const toggleAllCategories = () => {
+    const nextValue = !allCategoriesSelected;
+
+    setCategories({
+      generation: nextValue,
+      tariffs: nextValue,
+      regulatory: nextValue,
+      gas: nextValue,
+    });
+  };
+
   return (
     <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-white">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8 border-b border-gray-200 pb-5">
           <h1 className="text-2xl font-semibold text-gray-900">Briefing Note Generator</h1>
           <p className="mt-2 text-sm text-gray-500">
-            Generate formal, data-backed reports covering specific timeframes and topics. 
-            The AI pulls directly from the PostgreSQL database and formats the output into a standard 6-part executive structure.
+            Generate professional, data-driven reports focused on specific topics and time periods.
           </p>
         </div>
 
@@ -117,6 +128,15 @@ NERC issued two minor enforcement actions regarding load rejection during this p
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Data Categories</label>
                 <div className="space-y-2">
+                  <label className="flex items-center border-b border-gray-200 pb-2">
+                    <input
+                      type="checkbox"
+                      checked={allCategoriesSelected}
+                      onChange={toggleAllCategories}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-2 text-sm font-medium text-gray-900">Select all</span>
+                  </label>
                   {Object.entries(categories).map(([key, value]) => (
                     <label key={key} className="flex items-center">
                       <input

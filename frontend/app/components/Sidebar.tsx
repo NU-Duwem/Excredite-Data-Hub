@@ -6,6 +6,17 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { useEffect, useState } from 'react';
 
+const roleDisplayNames: Record<string, string> = {
+  power_admin: 'System Admin',
+  power_ceo: 'Chief Executive',
+  power_legal: 'Legal Expert',
+  power_analyst: 'Research Analyst',
+  power_app: 'IT Expert',
+  power_ingestion: 'Ingestion Operator',
+  power_team: 'Team Member',
+  power_ai: 'AI Assistant',
+};
+
 const navItems = [
   {
     href: '/query',
@@ -58,6 +69,13 @@ const navItems = [
     ),
   },
   {
+    href: '/admin',
+    label: 'Admin Panel',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+    ),
+  },
+  {
     href: '/profile',
     label: 'Profile & Settings',
     icon: (
@@ -71,6 +89,7 @@ export default function Sidebar() {
   const router = useRouter();
   const [userName, setUserName] = useState('User');
   const [userInitials, setUserInitials] = useState('U');
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [alertCount, setAlertCount] = useState(0);
   const supabase = createClient();
   
@@ -90,11 +109,23 @@ export default function Sidebar() {
           .toUpperCase()
           .substring(0, 2);
         setUserInitials(initials || 'U');
+
+        // Fetch user role from user_profiles in DB for reliability
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile) {
+          setUserRole(profile.role);
+        } else {
+          setUserRole(user.user_metadata?.role || 'power_team');
+        }
       }
     };
 
     const getAlertCount = async () => {
-      // In a real scenario, this would query unreviewed alerts
       const { count } = await supabase
         .from('anomaly_alerts')
         .select('*', { count: 'exact', head: true })
@@ -155,42 +186,44 @@ export default function Sidebar() {
       </div>
       
       <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        {navItems
+          .filter((item) => item.href !== '/admin' || userRole === 'power_admin')
+          .map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                isActive
-                  ? 'text-gray-900 bg-gray-100'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <div className="flex items-center">
-                <svg
-                  className={`mr-3 shrink-0 h-5 w-5 ${
-                    isActive ? 'text-gray-500' : 'text-gray-400 group-hover:text-gray-500'
-                  }`}
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  {item.icon}
-                </svg>
-                {item.label}
-              </div>
-              
-              {item.badge && alertCount > 0 && (
-                <span className="inline-flex items-center justify-center px-2 py-0.5 ml-2 text-[10px] font-bold leading-none text-white bg-red-600 rounded-full">
-                  {alertCount}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  isActive
+                    ? 'text-gray-900 bg-gray-100'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <div className="flex items-center">
+                  <svg
+                    className={`mr-3 shrink-0 h-5 w-5 ${
+                      isActive ? 'text-gray-500' : 'text-gray-400 group-hover:text-gray-500'
+                    }`}
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    {item.icon}
+                  </svg>
+                  {item.label}
+                </div>
+                
+                {item.badge && alertCount > 0 && (
+                  <span className="inline-flex items-center justify-center px-2 py-0.5 ml-2 text-[10px] font-bold leading-none text-white bg-red-600 rounded-full">
+                    {alertCount}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
       </nav>
       
       <div className="flex-shrink-0 flex flex-col border-t border-gray-200 p-4 gap-4">
@@ -200,7 +233,9 @@ export default function Sidebar() {
           </div>
           <div className="ml-3 overflow-hidden">
             <p className="text-sm font-semibold text-gray-900 truncate">{userName}</p>
-            <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Internal Admin</p>
+            <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+              {roleDisplayNames[userRole || ''] || 'Loading...'}
+            </p>
           </div>
         </div>
 

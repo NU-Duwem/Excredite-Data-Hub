@@ -1,12 +1,78 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const initialMessage = {
   id: 1,
   role: 'assistant',
   content: 'Hello. I am the Excredite Power Data Hub AI. How can I assist you with power sector analytics today?',
 };
+
+function parseInlineMarkdown(text: string) {
+  // Parse bold text "**something**"
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={index} className="font-bold text-gray-900">{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
+function renderMarkdown(content: string) {
+  const lines = content.split('\n');
+  
+  return lines.map((line, idx) => {
+    const trimmed = line.trim();
+    
+    // Headings
+    if (trimmed.startsWith('### ')) {
+      return (
+        <h3 key={idx} className="text-base font-bold text-gray-900 mt-4 mb-2 first:mt-0">
+          {parseInlineMarkdown(trimmed.slice(4))}
+        </h3>
+      );
+    }
+    if (trimmed.startsWith('## ')) {
+      return (
+        <h2 key={idx} className="text-lg font-bold text-gray-900 mt-5 mb-3 first:mt-0">
+          {parseInlineMarkdown(trimmed.slice(3))}
+        </h2>
+      );
+    }
+    if (trimmed.startsWith('# ')) {
+      return (
+        <h1 key={idx} className="text-xl font-bold text-gray-900 mt-6 mb-4 first:mt-0">
+          {parseInlineMarkdown(trimmed.slice(2))}
+        </h1>
+      );
+    }
+    
+    // Bullet points
+    if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+      return (
+        <ul key={idx} className="list-disc pl-5 my-1">
+          <li className="text-[15px] leading-relaxed text-gray-800">
+            {parseInlineMarkdown(trimmed.slice(2))}
+          </li>
+        </ul>
+      );
+    }
+    
+    // Empty lines
+    if (trimmed === '') {
+      return <div key={idx} className="h-2"></div>;
+    }
+    
+    // Default Paragraph
+    return (
+      <p key={idx} className="text-[15px] leading-relaxed my-1 text-gray-800">
+        {parseInlineMarkdown(line)}
+      </p>
+    );
+  });
+}
 
 export default function AIQueryInterface() {
   const [query, setQuery] = useState('');
@@ -15,26 +81,57 @@ export default function AIQueryInterface() {
   
   // Mock conversation state
   const [messages, setMessages] = useState([initialMessage]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isSubmitting]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || isSubmitting) return;
 
-    // Add user message
-    setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: query }]);
+    const userMessage = { id: Date.now(), role: 'user', content: query };
+    const updatedMessages = [...messages, userMessage];
+
+    // Add user message to UI
+    setMessages(updatedMessages);
     setQuery('');
     setIsSubmitting(true);
 
-    // Mock AI response delay
-    responseTimeoutRef.current = setTimeout(() => {
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: updatedMessages }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessages(prev => [...prev, { 
+          id: Date.now(), 
+          role: 'assistant', 
+          content: data.error || 'An error occurred while connecting to the AI service.' 
+        }]);
+      } else {
+        setMessages(prev => [...prev, { 
+          id: Date.now(), 
+          role: 'assistant', 
+          content: data.content 
+        }]);
+      }
+    } catch (err) {
       setMessages(prev => [...prev, { 
         id: Date.now(), 
         role: 'assistant', 
-        content: 'This is a mock response based on your query. In a real scenario, this would connect to the Supabase backend which interfaces with Claude and the PostgreSQL database to return data-backed insights.' 
+        content: 'Failed to connect to the server.' 
       }]);
+    } finally {
       setIsSubmitting(false);
-      responseTimeoutRef.current = null;
-    }, 1500);
+    }
   };
 
   const handleNewConversation = () => {
@@ -87,7 +184,11 @@ export default function AIQueryInterface() {
                     ? 'bg-brand text-white shadow-sm' 
                     : 'bg-gray-50 border border-gray-200 text-gray-900'
                 }`}>
-                  <p className="text-[15px] leading-relaxed">{msg.content}</p>
+                  {msg.role === 'user' ? (
+                    <p className="text-[15px] leading-relaxed">{msg.content}</p>
+                  ) : (
+                    <div className="space-y-1">{renderMarkdown(msg.content)}</div>
+                  )}
                   
                   {msg.role === 'assistant' && msg.id !== 1 && (
                     <div className="mt-4 pt-3 border-t border-gray-200 flex space-x-4">
@@ -119,6 +220,7 @@ export default function AIQueryInterface() {
                 </div>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
         </div>

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -30,6 +31,15 @@ export default function LoginPage() {
       }
 
       if (data.session) {
+        // Log successful login to activity table (swallows error if table not yet migrated)
+        await supabase
+          .from('user_activity_log')
+          .insert({
+            user_id: data.session.user.id,
+            action: 'LOGIN',
+            details: 'User logged in successfully.',
+          });
+
         router.push('/query');
         router.refresh();
       }
@@ -107,6 +117,15 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs font-semibold px-1">
+            <Link href="/forgot-password" className="text-brand hover:underline font-bold">
+              Forgot password?
+            </Link>
+            <Link href="/signup" className="text-brand hover:underline font-bold">
+              Create account
+            </Link>
           </div>
 
           {error && (

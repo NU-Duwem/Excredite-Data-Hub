@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Excredite Power Data Hub",
+  title: "Excredite Electricity Data Hub",
   description: "Centralised analytics and intelligence platform for Nigeria's electricity sector",
 };
 

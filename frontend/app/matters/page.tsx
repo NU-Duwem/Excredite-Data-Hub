@@ -60,7 +60,7 @@ export default function MattersPage() {
           <div className="bg-white p-6 rounded-xl border border-brand/20 shadow-sm animate-in fade-in slide-in-from-top-4">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-sm font-bold text-gray-900 uppercase">Matter Progress: <span className="text-brand">{selectedMatter.ref}</span></h3>
-              <button onClick={() => setSelectedDoc(null)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setSelectedMatter(null)} className="text-gray-400 hover:text-gray-600">
                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>

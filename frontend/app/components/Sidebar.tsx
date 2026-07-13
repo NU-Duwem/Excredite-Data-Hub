@@ -33,13 +33,6 @@ const navItems = [
     ),
   },
   {
-    href: '/briefing',
-    label: 'Briefing Notes',
-    icon: (
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-    ),
-  },
-  {
     href: '/alerts',
     label: 'Anomaly Alerts',
     badge: true,
@@ -69,6 +62,13 @@ const navItems = [
     ),
   },
   {
+    href: '/news',
+    label: 'News & Updates',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+    ),
+  },
+  {
     href: '/admin',
     label: 'Admin Panel',
     icon: (
@@ -91,7 +91,22 @@ export default function Sidebar() {
   const [userInitials, setUserInitials] = useState('U');
   const [userRole, setUserRole] = useState<string | null>(null);
   const [alertCount, setAlertCount] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
   const supabase = createClient();
+
+  // Restore collapsed state from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('sidebar-collapsed');
+    if (stored === 'true') setCollapsed(true);
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebar-collapsed', String(next));
+      return next;
+    });
+  };
   
   useEffect(() => {
     const getUserData = async () => {
@@ -129,7 +144,7 @@ export default function Sidebar() {
       const { count } = await supabase
         .from('anomaly_alerts')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'UNREVIEWED');
+        .in('status', ['UNREVIEWED', 'ASSIGNED']);
       
       setAlertCount(count || 0);
 
@@ -169,23 +184,44 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-52 bg-white border-r border-gray-200 hidden md:flex flex-col h-full shrink-0">
-      <div className="h-28 flex flex-col items-center justify-center gap-1 px-4 border-b border-gray-200 text-center">
+    <aside
+      className={`${collapsed ? 'w-16' : 'w-52'} bg-white border-r border-gray-200 hidden md:flex flex-col h-full shrink-0 transition-all duration-300 ease-in-out`}
+    >
+      {/* Header with logo + brand */}
+      <div className={`${collapsed ? 'h-20' : 'h-32'} flex flex-col items-center justify-center gap-1 px-2 border-b border-gray-200 text-center relative transition-all duration-300`}>
         <Image
           src="/Excredite_logo.png"
-          alt="Excredite Power Data logo"
-          width={72}
-          height={72}
-          className="object-contain shrink-0"
+          alt="Excredite Electricity Data Hub logo"
+          width={collapsed ? 36 : 88}
+          height={collapsed ? 36 : 88}
+          className="object-contain shrink-0 transition-all duration-300"
           style={{ height: 'auto' }}
           priority
         />
-        <span className="max-w-40 text-xs font-bold leading-tight text-gray-900 tracking-tight uppercase">
-          Power Data Hub
-        </span>
+        {!collapsed && (
+          <span className="max-w-40 text-xs font-bold leading-tight text-gray-900 tracking-tight uppercase">
+            Electricity Data Hub
+          </span>
+        )}
       </div>
+
+      {/* Collapse toggle button */}
+      <button
+        onClick={toggleCollapsed}
+        className="mx-auto my-2 p-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        <svg
+          className={`h-4 w-4 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+        </svg>
+      </button>
       
-      <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
         {navItems
           .filter((item) => item.href !== '/admin' || userRole === 'power_admin')
           .map((item) => {
@@ -195,7 +231,8 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                title={collapsed ? item.label : undefined}
+                className={`group flex items-center justify-between ${collapsed ? 'px-2 py-2 justify-center' : 'px-3 py-2'} text-sm font-medium rounded-md transition-colors ${
                   isActive
                     ? 'text-gray-900 bg-gray-100'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -203,7 +240,7 @@ export default function Sidebar() {
               >
                 <div className="flex items-center">
                   <svg
-                    className={`mr-3 shrink-0 h-5 w-5 ${
+                    className={`shrink-0 h-5 w-5 ${collapsed ? '' : 'mr-3'} ${
                       isActive ? 'text-gray-500' : 'text-gray-400 group-hover:text-gray-500'
                     }`}
                     xmlns="http://www.w3.org/2000/svg"
@@ -213,12 +250,12 @@ export default function Sidebar() {
                   >
                     {item.icon}
                   </svg>
-                  {item.label}
+                  {!collapsed && item.label}
                 </div>
                 
                 {item.badge && alertCount > 0 && (
-                  <span className="inline-flex items-center justify-center px-2 py-0.5 ml-2 text-[10px] font-bold leading-none text-white bg-red-600 rounded-full">
-                    {alertCount}
+                  <span className={`inline-flex items-center justify-center ${collapsed ? 'absolute top-0.5 right-0.5' : 'px-2 py-0.5 ml-2'} text-[10px] font-bold leading-none text-white bg-red-600 rounded-full ${collapsed ? 'h-4 w-4' : ''}`}>
+                    {collapsed ? '' : alertCount}
                   </span>
                 )}
               </Link>
@@ -226,27 +263,38 @@ export default function Sidebar() {
           })}
       </nav>
       
-      <div className="flex-shrink-0 flex flex-col border-t border-gray-200 p-4 gap-4">
-        <div className="flex items-center">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-white text-sm font-bold shadow-sm leading-none">
-            {userInitials}
+      <div className={`flex-shrink-0 flex flex-col border-t border-gray-200 ${collapsed ? 'p-2' : 'p-4'} gap-4`}>
+        {collapsed ? (
+          /* Collapsed: just avatar */
+          <div className="flex items-center justify-center">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-white text-sm font-bold shadow-sm leading-none" title={`${userName} (${roleDisplayNames[userRole || ''] || 'Loading...'})`}>
+              {userInitials}
+            </div>
           </div>
-          <div className="ml-3 overflow-hidden">
-            <p className="text-sm font-semibold text-gray-900 truncate">{userName}</p>
-            <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
-              {roleDisplayNames[userRole || ''] || 'Loading...'}
-            </p>
+        ) : (
+          /* Expanded: avatar + name */
+          <div className="flex items-center">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-white text-sm font-bold shadow-sm leading-none">
+              {userInitials}
+            </div>
+            <div className="ml-3 overflow-hidden">
+              <p className="text-sm font-semibold text-gray-900 truncate">{userName}</p>
+              <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+                {roleDisplayNames[userRole || ''] || 'Loading...'}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         <button
           onClick={handleLogout}
-          className="flex items-center px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-md transition-colors w-full border border-red-100"
+          className={`flex items-center ${collapsed ? 'justify-center px-2' : 'px-3'} py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-md transition-colors w-full border border-red-100`}
+          title={collapsed ? 'Logout' : undefined}
         >
-          <svg className="mr-3 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className={`${collapsed ? '' : 'mr-3'} h-4 w-4`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
-          LOGOUT
+          {!collapsed && 'LOGOUT'}
         </button>
       </div>
     </aside>

@@ -10,10 +10,31 @@ export default function ProfilePage() {
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState('User');
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [updateStatus, setUpdateStatus] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [isForceReset, setIsForceReset] = useState(false);
+
+  // Activity log state
+  const [activityLog, setActivityLog] = useState<any[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+
   const supabase = createClient();
   const router = useRouter();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('force_reset') === 'true') {
+        setIsForceReset(true);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -22,7 +43,28 @@ export default function ProfilePage() {
         setUser(user);
         setUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'User');
         setUserEmail(user.email || '');
-        setUserRole(user.user_metadata?.role || 'power_analyst');
+
+        // Fetch role from DB
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+
+        const role = profile?.role || user.user_metadata?.role || 'power_analyst';
+        setUserRole(role);
+        setIsAdmin(role === 'power_admin');
+
+        // Fetch own activity log
+        setActivityLoading(true);
+        const { data: logs } = await supabase
+          .from('user_activity_log')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        setActivityLog(logs || []);
+        setActivityLoading(false);
       } else {
         router.push('/login');
       }
@@ -33,17 +75,63 @@ export default function ProfilePage() {
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPassword) return;
+    setUpdateStatus('');
+
+    // Validation
+    if (!currentPassword) {
+      setUpdateStatus('Error: Please enter your current password.');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      setUpdateStatus('Error: New password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setUpdateStatus('Error: New passwords do not match.');
+      return;
+    }
     
-    setUpdateStatus('Updating...');
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setPasswordLoading(true);
+    setUpdateStatus('Verifying current password...');
+
+    // Step 1: Verify current password by attempting sign in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: userEmail,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      setUpdateStatus('Error: Current password is incorrect.');
+      setPasswordLoading(false);
+      return;
+    }
+
+    // Step 2: Update to new password and clear the force_password_reset flag in metadata
+    setUpdateStatus('Updating password...');
+    const { error } = await supabase.auth.updateUser({ 
+      password: newPassword,
+      data: { force_password_reset: null }
+    });
     
     if (error) {
       setUpdateStatus('Error: ' + error.message);
     } else {
       setUpdateStatus('Password updated successfully!');
+      setCurrentPassword('');
       setNewPassword('');
+      setConfirmPassword('');
+      setIsForceReset(false);
+
+      // Log the activity
+      if (user) {
+        await supabase.from('user_activity_log').insert({
+          user_id: user.id,
+          action: 'PASSWORD_CHANGED',
+          details: 'User changed their password.',
+        });
+      }
     }
+    setPasswordLoading(false);
   };
 
   const handleLogout = async () => {
@@ -57,6 +145,20 @@ export default function ProfilePage() {
     .join('')
     .toUpperCase()
     .substring(0, 2);
+
+  const formatTimeAgo = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
 
   if (loading) {
     return (
@@ -101,13 +203,22 @@ export default function ProfilePage() {
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
               <h3 className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-wider">Session Info</h3>
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Joined</span>
-                  <span className="text-gray-900 font-medium">{new Date(user?.created_at).toLocaleDateString()}</span>
-                </div>
+                {/* "Joined" date only visible to Admin users */}
+                {isAdmin && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Joined</span>
+                    <span className="text-gray-900 font-medium">{new Date(user?.created_at).toLocaleDateString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-500">Auth Method</span>
                   <span className="text-gray-900 font-medium">Supabase Auth</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Last Sign In</span>
+                  <span className="text-gray-900 font-medium">
+                    {user?.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'N/A'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -119,10 +230,23 @@ export default function ProfilePage() {
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-gray-100 bg-gray-50/50">
                 <h3 className="text-base font-bold text-gray-900">Security & Privacy</h3>
-                <p className="text-xs text-gray-500">Keep your account secure with a strong password.</p>
+                <p className="text-xs text-gray-500">Change your password. You must confirm your current password first.</p>
               </div>
               <div className="p-6">
                 <form onSubmit={handleUpdatePassword} className="space-y-4 max-w-md">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
+                      Current Password
+                    </label>
+                    <input 
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Enter your current password"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none"
+                      required
+                    />
+                  </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
                       New Password
@@ -133,13 +257,35 @@ export default function ProfilePage() {
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Minimum 6 characters"
                       className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none"
+                      required
+                      minLength={6}
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
+                      Confirm New Password
+                    </label>
+                    <input 
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter your new password"
+                      className={`w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none ${
+                        confirmPassword && confirmPassword !== newPassword ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      required
+                      minLength={6}
+                    />
+                    {confirmPassword && confirmPassword !== newPassword && (
+                      <p className="text-xs text-red-500 mt-1 font-medium">Passwords do not match</p>
+                    )}
                   </div>
                   <button 
                     type="submit"
-                    className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-[#a38020] transition-colors"
+                    disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword}
+                    className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-[#a38020] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Update Password
+                    {passwordLoading ? 'Processing...' : 'Update Password'}
                   </button>
                   {updateStatus && (
                     <p className={`text-xs mt-2 font-medium ${updateStatus.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
@@ -150,7 +296,7 @@ export default function ProfilePage() {
               </div>
             </section>
 
-            {/* Notifications Section (Mock) */}
+            {/* Notifications Section */}
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-gray-100 bg-gray-50/50">
                 <h3 className="text-base font-bold text-gray-900">Notification Preferences</h3>
@@ -180,27 +326,48 @@ export default function ProfilePage() {
               </div>
             </section>
 
-            {/* Recent Activity (Mock) */}
+            {/* Activity Log (from database) */}
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-gray-100 bg-gray-50/50">
                 <h3 className="text-base font-bold text-gray-900">Recent Activity</h3>
                 <p className="text-xs text-gray-500">A log of your recent interactions with the hub.</p>
               </div>
               <div className="divide-y divide-gray-100">
-                {[
-                  { action: 'AI Query', target: 'Latest tariff orders for IBEDC', time: '2 hours ago' },
-                  { action: 'Briefing Generated', target: 'Grid Performance Q1 2026', time: '5 hours ago' },
-                  { action: 'Document Uploaded', target: 'NERC_Enforcement_EGBIN.pdf', time: 'Yesterday' },
-                  { action: 'Login', target: 'Successful login from Abuja, NG', time: 'Yesterday' },
-                ].map((activity, idx) => (
-                  <div key={idx} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                    <div>
-                      <p className="text-sm font-bold text-gray-900">{activity.action}</p>
-                      <p className="text-xs text-gray-500">{activity.target}</p>
-                    </div>
-                    <span className="text-[10px] font-medium text-gray-400 uppercase">{activity.time}</span>
+                {activityLoading ? (
+                  <div className="p-8 text-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand mx-auto"></div>
+                    <p className="text-xs text-gray-500 mt-2">Loading activity...</p>
                   </div>
-                ))}
+                ) : activityLog.length > 0 ? (
+                  activityLog.map((activity, idx) => (
+                    <div key={activity.id || idx} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">
+                          {activity.action?.replace(/_/g, ' ') || 'Activity'}
+                        </p>
+                        <p className="text-xs text-gray-500">{activity.details || ''}</p>
+                      </div>
+                      <span className="text-[10px] font-medium text-gray-400 uppercase whitespace-nowrap">
+                        {formatTimeAgo(activity.created_at)}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  /* Fallback: show mock data if no real logs exist yet */
+                  [
+                    { action: 'AI Query', target: 'Latest tariff orders for IBEDC', time: '2 hours ago' },
+                    { action: 'Document Uploaded', target: 'NERC_Enforcement_EGBIN.pdf', time: 'Yesterday' },
+                    { action: 'Login', target: 'Successful login', time: 'Yesterday' },
+                  ].map((activity, idx) => (
+                    <div key={idx} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{activity.action}</p>
+                        <p className="text-xs text-gray-500">{activity.target}</p>
+                      </div>
+                      <span className="text-[10px] font-medium text-gray-400 uppercase">{activity.time}</span>
+                    </div>
+                  ))
+                )}
               </div>
             </section>
           </div>

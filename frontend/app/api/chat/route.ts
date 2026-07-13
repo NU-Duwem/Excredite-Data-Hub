@@ -224,7 +224,7 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
           content: responseContent
         });
 
-        const toolUses = responseContent.filter(block => block.type === 'tool_use');
+        const toolUses = responseContent.filter((block: any) => block.type === 'tool_use');
 
         if (toolUses.length > 0) {
           const toolResultBlocks = [];
@@ -256,7 +256,7 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
           loopCount++;
         } else {
           // Final text response
-          const textBlock = responseContent.find(block => block.type === 'text');
+          const textBlock = responseContent.find((block: any) => block.type === 'text');
           const reply = textBlock?.text || 'No response generated.';
           return NextResponse.json({ content: reply });
         }
@@ -363,7 +363,7 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
 
       const resData = await response.json();
       const modelParts = resData.candidates?.[0]?.content?.parts || [];
-      const functionCalls = modelParts.filter(p => p.functionCall);
+      const functionCalls = modelParts.filter((p: any) => p.functionCall);
 
       // Append model message to history
       currentContents.push({
@@ -372,7 +372,7 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
       });
 
       if (functionCalls.length > 0) {
-        const toolResponseParts = [];
+        const toolResponseParts: any[] = [];
         
         for (const part of functionCalls) {
           const call = part.functionCall;
@@ -401,7 +401,7 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
         currentContents.push({
           role: 'user',
           parts: toolResponseParts
-        });
+        } as any);
 
         loopCount++;
       } else {

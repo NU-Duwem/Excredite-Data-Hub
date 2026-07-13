@@ -128,7 +128,7 @@ export default function ForecastsPage() {
                   stroke="none" 
                   fill="#b58e23" 
                   fillOpacity={0.1} 
-                  baseLine="lower"
+                  baseLine={"lower" as any}
                   animationDuration={1500}
                 />
                 <Area 

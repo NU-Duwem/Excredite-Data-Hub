@@ -109,7 +109,7 @@ export async function POST(req: Request) {
       .map(o => `- ${o.name} (${o.short_name}): Type: ${o.org_type}, Status: ${o.status}`)
       .join('\n');
 
-    const systemInstruction = `You are the Excredite Power Data Hub AI, a helpful assistant specialized in Nigeria's electricity sector.
+    const systemInstruction = `You are the Excredite Electricity Data Hub AI, a helpful assistant specialized in Nigeria's electricity sector.
 You have access to the following current state of the database structure and metadata:
 
 Power Plants (32 Total, 14,464 MW Total Capacity):

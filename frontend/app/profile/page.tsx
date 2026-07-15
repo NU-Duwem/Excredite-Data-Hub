@@ -3,6 +3,18 @@
 import { createClient } from '@/utils/supabase/client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+const roleDisplayNames: Record<string, string> = {
+  power_admin: 'System Admin',
+  power_ceo: 'CEO',
+  power_legal: 'Legal Expert',
+  power_analyst: 'Research Analyst',
+  power_app: 'IT Expert',
+  power_ingestion: 'Ingestion Operator',
+  power_team: 'Team Member',
+  power_ai: 'AI Assistant',
+};
 
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
@@ -19,6 +31,7 @@ export default function ProfilePage() {
   const [updateStatus, setUpdateStatus] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [isForceReset, setIsForceReset] = useState(false);
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
 
   // Activity log state
   const [activityLog, setActivityLog] = useState<any[]>([]);
@@ -187,7 +200,7 @@ export default function ProfilePage() {
               <p className="text-sm text-gray-500 mb-6">{userEmail}</p>
               
               <div className="inline-flex items-center px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-bold uppercase tracking-wider">
-                {userRole.replace('_', ' ')}
+                {roleDisplayNames[userRole] || userRole.replace('power_', '').replace('_', ' ')}
               </div>
 
               <div className="mt-8 pt-6 border-t border-gray-100">
@@ -230,69 +243,109 @@ export default function ProfilePage() {
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-gray-100 bg-gray-50/50">
                 <h3 className="text-base font-bold text-gray-900">Security & Privacy</h3>
-                <p className="text-xs text-gray-500">Change your password. You must confirm your current password first.</p>
+                <p className="text-xs text-gray-500">Manage your password and account security.</p>
               </div>
-              <div className="p-6">
-                <form onSubmit={handleUpdatePassword} className="space-y-4 max-w-md">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
-                      Current Password
-                    </label>
-                    <input 
-                      type="password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder="Enter your current password"
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none"
-                      required
-                    />
+              <div className="p-6 space-y-4">
+                {/* Action Buttons */}
+                {!showPasswordForm && !isForceReset && (
+                  <div className="flex flex-col sm:flex-row gap-3 max-w-md">
+                    <button
+                      onClick={() => setShowPasswordForm(true)}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-brand text-white rounded-lg text-sm font-bold shadow-md hover:bg-[#a38020] transition-colors"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      </svg>
+                      Update Password
+                    </button>
+                    <Link
+                      href="/forgot-password"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white text-gray-700 border border-gray-300 rounded-lg text-sm font-bold shadow-sm hover:bg-gray-50 transition-colors"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      Forgot Password
+                    </Link>
                   </div>
+                )}
+
+                {/* Update Password Form */}
+                {(showPasswordForm || isForceReset) && (
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
-                      New Password
-                    </label>
-                    <input 
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Minimum 6 characters"
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none"
-                      required
-                      minLength={6}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
-                      Confirm New Password
-                    </label>
-                    <input 
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Re-enter your new password"
-                      className={`w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none ${
-                        confirmPassword && confirmPassword !== newPassword ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                      required
-                      minLength={6}
-                    />
-                    {confirmPassword && confirmPassword !== newPassword && (
-                      <p className="text-xs text-red-500 mt-1 font-medium">Passwords do not match</p>
+                    {!isForceReset && (
+                      <button
+                        onClick={() => { setShowPasswordForm(false); setUpdateStatus(''); }}
+                        className="text-xs font-bold text-gray-500 hover:text-gray-700 mb-4 flex items-center gap-1 transition-colors"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                        Back to options
+                      </button>
                     )}
+                    <form onSubmit={handleUpdatePassword} className="space-y-4 max-w-md">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
+                          Current Password
+                        </label>
+                        <input 
+                          type="password"
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          placeholder="Enter your current password"
+                          className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
+                          New Password
+                        </label>
+                        <input 
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Minimum 6 characters"
+                          className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none"
+                          required
+                          minLength={6}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
+                          Confirm New Password
+                        </label>
+                        <input 
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Re-enter your new password"
+                          className={`w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none ${
+                            confirmPassword && confirmPassword !== newPassword ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                          required
+                          minLength={6}
+                        />
+                        {confirmPassword && confirmPassword !== newPassword && (
+                          <p className="text-xs text-red-500 mt-1 font-medium">Passwords do not match</p>
+                        )}
+                      </div>
+                      <button 
+                        type="submit"
+                        disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword}
+                        className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-[#a38020] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {passwordLoading ? 'Processing...' : 'Update Password'}
+                      </button>
+                      {updateStatus && (
+                        <p className={`text-xs mt-2 font-medium ${updateStatus.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
+                          {updateStatus}
+                        </p>
+                      )}
+                    </form>
                   </div>
-                  <button 
-                    type="submit"
-                    disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword}
-                    className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-[#a38020] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {passwordLoading ? 'Processing...' : 'Update Password'}
-                  </button>
-                  {updateStatus && (
-                    <p className={`text-xs mt-2 font-medium ${updateStatus.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
-                      {updateStatus}
-                    </p>
-                  )}
-                </form>
+                )}
               </div>
             </section>
 

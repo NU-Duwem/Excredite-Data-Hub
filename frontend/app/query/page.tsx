@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 
 const initialMessage = {
   id: 1,
   role: 'assistant',
-  content: 'Hello. I am the Excredite Power Data Hub AI. How can I assist you with power sector analytics today?',
+  content: 'Hello. I am the Excredite Electricity Data Hub AI. How can I assist you with power sector analytics today?',
 };
 
 function parseInlineMarkdown(text: string) {
@@ -174,6 +175,37 @@ export default function AIQueryInterface() {
              >
                + New Conversation
              </button>
+          </div>
+
+          {/* Quick Links to related sections */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            <Link
+              href="/documents"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-brand/5 hover:border-brand/30 hover:text-brand transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+              Documents
+            </Link>
+            <Link
+              href="/matters"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-brand/5 hover:border-brand/30 hover:text-brand transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+              </svg>
+              Legal Matters
+            </Link>
+            <Link
+              href="/news"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-brand/5 hover:border-brand/30 hover:text-brand transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+              </svg>
+              News & Updates
+            </Link>
           </div>
 
           <div className="flex-1 flex flex-col space-y-6 pb-24">

@@ -33,6 +33,8 @@ export async function POST(req: Request) {
     const documentType = formData.get('documentType') as string;
     const customType = formData.get('customType') as string;
     const classification = formData.get('classification') as string;
+    const keywords = formData.get('keywords') as string | null;
+    const linkedMatterId = formData.get('linkedMatterId') as string | null;
 
     if (!file || !title || !documentType || !classification) {
       return NextResponse.json({ error: 'Missing required fields: file, title, documentType, classification' }, { status: 400 });
@@ -89,6 +91,8 @@ export async function POST(req: Request) {
         file_size_bytes: file.size,
         uploaded_by: user.email,
         processing_status: 'PENDING',
+        matter_id: linkedMatterId || null,
+        notes: keywords || null,
       })
       .select()
       .single();

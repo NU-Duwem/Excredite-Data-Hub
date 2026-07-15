@@ -1,12 +1,6 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import Sidebar from "./components/Sidebar";
 import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Excredite Electricity Data Hub",
@@ -21,7 +15,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} h-full antialiased`}
+      className="h-full antialiased"
       suppressHydrationWarning
     >
       <body className="h-full bg-[var(--background)] text-[var(--foreground)] flex" suppressHydrationWarning>

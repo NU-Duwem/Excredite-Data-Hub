@@ -58,7 +58,7 @@ export default function LoginPage() {
             <span className="text-white font-bold text-xl tracking-tight">EPDH</span>
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 tracking-tight">
-            Excredite Power Data Hub
+            Excredite Electricity Data Hub
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Secure administrative access only

@@ -7,6 +7,7 @@
   --brand: #b58e23;
   --sidebar-bg: #ffffff;
   --border-color: #e2e8f0;
+  --font-inter: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 @theme inline {

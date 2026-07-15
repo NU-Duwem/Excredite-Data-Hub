@@ -27,7 +27,7 @@ export default function NotFound() {
       </div>
       
       <div className="mt-16 text-gray-400 text-xs uppercase tracking-widest font-bold">
-        Excredite Power Data Hub
+        Excredite Electricity Data Hub
       </div>
     </div>
   );

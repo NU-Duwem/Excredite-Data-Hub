@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 
 const roleDisplayNames: Record<string, string> = {
   power_admin: 'System Admin',
-  power_ceo: 'Chief Executive',
+  power_ceo: 'CEO',
   power_legal: 'Legal Expert',
   power_analyst: 'Research Analyst',
   power_app: 'IT Expert',

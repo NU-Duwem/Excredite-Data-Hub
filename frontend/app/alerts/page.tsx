@@ -9,10 +9,9 @@ interface Alert {
   alert_date: string;
   actual_output_mwh: number | null;
   expected_output_mwh: number | null;
-  deviation_stddev: number;
   alert_type: string;
   explanation: string | null;
-  status: 'UNREVIEWED' | 'ASSIGNED' | 'REVIEWED' | 'RESOLVED' | 'DISMISSED';
+  status: 'RESOLVED' | 'UNRESOLVED';
   reviewed_at: string | null;
   created_at: string;
   source_type: string;
@@ -29,9 +28,10 @@ export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState('UNREVIEWED');
+  const [filterStatus, setFilterStatus] = useState('UNRESOLVED');
   const [filterSource, setFilterSource] = useState('ALL');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const supabase = createClient();
 
@@ -41,7 +41,10 @@ export default function AlertsPage() {
 
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) setCurrentUserId(user.id);
+      if (user) {
+        setCurrentUserId(user.id);
+        setIsAdmin(user.user_metadata?.role === 'power_admin');
+      }
 
       // Fetch alerts
       const { data, error } = await supabase
@@ -51,40 +54,60 @@ export default function AlertsPage() {
         .limit(100);
 
       if (!error && data) {
-        setAlerts(data);
+        // Normalize statuses: map old statuses to RESOLVED/UNRESOLVED
+        const normalized = data.map((a: any) => ({
+          ...a,
+          status: ['RESOLVED', 'DISMISSED'].includes(a.status) ? 'RESOLVED' : 'UNRESOLVED',
+        }));
+        setAlerts(normalized);
       } else {
         // Fallback: mock data
         setAlerts([
           {
             id: '1', plant_id: 'mock-1', alert_date: '2026-05-11', actual_output_mwh: 120, expected_output_mwh: 300,
-            deviation_stddev: 2.2, alert_type: 'LOW_OUTPUT',
+            alert_type: 'LOW_OUTPUT',
             explanation: 'Output dropped 2.2 standard deviations below 30-day rolling average. Likely caused by NGC gas pressure drop at the Escravos-Lagos Pipeline System (ELPS). This drop represents a significant risk to grid stability in the Lagos region.',
-            status: 'UNREVIEWED', reviewed_at: null, created_at: '2026-05-11T10:00:00Z',
-            source_type: 'GENERATION', assigned_to: null, document_id: null, matter_id: null, news_id: null,
+            status: 'UNRESOLVED', reviewed_at: null, created_at: '2026-05-11T10:00:00Z',
+            source_type: 'FORECAST', assigned_to: null, document_id: null, matter_id: null, news_id: null,
             plant_name: 'Egbin Thermal',
           },
           {
             id: '2', plant_id: 'mock-2', alert_date: '2026-05-10', actual_output_mwh: 200, expected_output_mwh: 280,
-            deviation_stddev: 1.5, alert_type: 'LOW_OUTPUT',
+            alert_type: 'LOW_OUTPUT',
             explanation: 'Unscheduled capacity reduction detected. No TCN outage report matched. Historical patterns suggest potential reservoir management issues.',
-            status: 'UNREVIEWED', reviewed_at: null, created_at: '2026-05-10T08:00:00Z',
-            source_type: 'GENERATION', assigned_to: null, document_id: null, matter_id: null, news_id: null,
+            status: 'UNRESOLVED', reviewed_at: null, created_at: '2026-05-10T08:00:00Z',
+            source_type: 'FORECAST', assigned_to: null, document_id: null, matter_id: null, news_id: null,
             plant_name: 'Shiroro Hydro',
           },
           {
             id: '3', plant_id: 'mock-3', alert_date: '2026-05-08', actual_output_mwh: 470, expected_output_mwh: 400,
-            deviation_stddev: 1.2, alert_type: 'HIGH_OUTPUT',
+            alert_type: 'HIGH_OUTPUT',
             explanation: 'Output increased above typical dispatch instruction band. Efficiency gains noted following recent turbine overhaul.',
-            status: 'REVIEWED', reviewed_at: '2026-05-09T14:00:00Z', created_at: '2026-05-08T12:00:00Z',
-            source_type: 'GENERATION', assigned_to: null, document_id: null, matter_id: null, news_id: null,
+            status: 'RESOLVED', reviewed_at: '2026-05-09T14:00:00Z', created_at: '2026-05-08T12:00:00Z',
+            source_type: 'FORECAST', assigned_to: null, document_id: null, matter_id: null, news_id: null,
             plant_name: 'Azura-Edo IPP',
           },
           {
             id: '4', plant_id: null, alert_date: '2026-05-07', actual_output_mwh: null, expected_output_mwh: null,
-            deviation_stddev: 3.0, alert_type: 'DOCUMENT_DISCREPANCY',
+            alert_type: 'DOCUMENT_DISCREPANCY',
             explanation: 'Conflicting generation figures detected between the TCN Quarterly Report Q1 2026 and the NERC Enforcement Notice issued on 2026-04-30.',
-            status: 'UNREVIEWED', reviewed_at: null, created_at: '2026-05-07T09:00:00Z',
+            status: 'UNRESOLVED', reviewed_at: null, created_at: '2026-05-07T09:00:00Z',
             source_type: 'DOCUMENT', assigned_to: null, document_id: 'doc-1', matter_id: null, news_id: null,
+          },
+          // Admin-only: Ingestion & System alerts
+          {
+            id: '5', plant_id: null, alert_date: '2026-05-06', actual_output_mwh: null, expected_output_mwh: null,
+            alert_type: 'INGESTION_FAILURE',
+            explanation: 'Data ingestion pipeline for TCN hourly dispatch data failed at 03:00 UTC. Retry limit exceeded after 3 attempts. Source endpoint returned HTTP 503.',
+            status: 'UNRESOLVED', reviewed_at: null, created_at: '2026-05-06T04:00:00Z',
+            source_type: 'INGESTION', assigned_to: null, document_id: null, matter_id: null, news_id: null,
+          },
+          {
+            id: '6', plant_id: null, alert_date: '2026-05-05', actual_output_mwh: null, expected_output_mwh: null,
+            alert_type: 'SYSTEM_WIDE',
+            explanation: 'Supabase storage bucket "documents" approaching 90% capacity. Consider archiving older documents or expanding storage allocation.',
+            status: 'UNRESOLVED', reviewed_at: null, created_at: '2026-05-05T12:00:00Z',
+            source_type: 'SYSTEM', assigned_to: null, document_id: null, matter_id: null, news_id: null,
           },
         ]);
       }
@@ -108,11 +131,12 @@ export default function AlertsPage() {
     setExpandedId(expandedId === id ? null : id);
   };
 
-  const updateStatus = async (id: string, newStatus: 'REVIEWED' | 'RESOLVED' | 'DISMISSED') => {
-    // Update in DB
+  const updateStatus = async (id: string, newStatus: 'RESOLVED' | 'UNRESOLVED') => {
+    // Map to DB values
+    const dbStatus = newStatus === 'RESOLVED' ? 'RESOLVED' : 'UNREVIEWED';
     await supabase
       .from('anomaly_alerts')
-      .update({ status: newStatus, reviewed_at: new Date().toISOString() })
+      .update({ status: dbStatus, reviewed_at: new Date().toISOString() })
       .eq('id', id);
 
     // Update local state
@@ -128,10 +152,16 @@ export default function AlertsPage() {
       .update({ assigned_to: currentUserId, status: 'ASSIGNED' })
       .eq('id', id);
 
-    setAlerts(prev => prev.map(a => a.id === id ? { ...a, assigned_to: currentUserId, status: 'ASSIGNED' } : a));
+    setAlerts(prev => prev.map(a => a.id === id ? { ...a, assigned_to: currentUserId } : a));
   };
 
-  const filteredAlerts = alerts.filter(a => {
+  // Filter alerts — hide INGESTION and SYSTEM from non-admin
+  const visibleAlerts = alerts.filter(a => {
+    if (!isAdmin && (a.source_type === 'INGESTION' || a.source_type === 'SYSTEM')) return false;
+    return true;
+  });
+
+  const filteredAlerts = visibleAlerts.filter(a => {
     const matchesStatus = filterStatus === 'ALL' || a.status === filterStatus;
     const matchesSource = filterSource === 'ALL' || a.source_type === filterSource;
     return matchesStatus && matchesSource;
@@ -139,23 +169,20 @@ export default function AlertsPage() {
 
   const getSourceBadge = (sourceType: string) => {
     switch (sourceType) {
-      case 'GENERATION': return { color: 'bg-blue-50 text-blue-700 ring-blue-600/20', label: 'Generation' };
+      case 'FORECAST': return { color: 'bg-blue-50 text-blue-700 ring-blue-600/20', label: 'Forecast' };
       case 'DOCUMENT': return { color: 'bg-purple-50 text-purple-700 ring-purple-600/20', label: 'Document' };
       case 'LEGAL_MATTER': return { color: 'bg-orange-50 text-orange-700 ring-orange-600/20', label: 'Legal' };
       case 'NEWS': return { color: 'bg-teal-50 text-teal-700 ring-teal-600/20', label: 'News' };
+      case 'INGESTION': return { color: 'bg-rose-50 text-rose-700 ring-rose-600/20', label: 'Ingestion' };
+      case 'SYSTEM': return { color: 'bg-slate-50 text-slate-700 ring-slate-600/20', label: 'System' };
       default: return { color: 'bg-gray-50 text-gray-700 ring-gray-600/20', label: sourceType };
     }
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'UNREVIEWED': return 'text-red-700 border-red-200 bg-red-50';
-      case 'ASSIGNED': return 'text-yellow-700 border-yellow-200 bg-yellow-50';
-      case 'REVIEWED': return 'text-blue-700 border-blue-200 bg-blue-50';
-      case 'RESOLVED': return 'text-green-700 border-green-200 bg-green-50';
-      case 'DISMISSED': return 'text-gray-600 border-gray-200 bg-gray-50';
-      default: return 'text-gray-600 border-gray-200 bg-gray-50';
-    }
+    return status === 'RESOLVED'
+      ? 'text-green-700 border-green-200 bg-green-50'
+      : 'text-red-700 border-red-200 bg-red-50';
   };
 
   const getEntityName = (alert: Alert) => {
@@ -163,6 +190,8 @@ export default function AlertsPage() {
     if (alert.source_type === 'DOCUMENT') return 'Document Discrepancy';
     if (alert.source_type === 'LEGAL_MATTER') return 'Legal Matter Conflict';
     if (alert.source_type === 'NEWS') return 'News Conflict';
+    if (alert.source_type === 'INGESTION') return 'Ingestion Problem';
+    if (alert.source_type === 'SYSTEM') return 'System Alert';
     return 'Unknown Entity';
   };
 
@@ -176,6 +205,19 @@ export default function AlertsPage() {
     );
   }
 
+  // Build source options based on admin status
+  const sourceOptions = [
+    { value: 'ALL', label: 'All Sources' },
+    { value: 'FORECAST', label: 'Forecast' },
+    { value: 'DOCUMENT', label: 'Documents' },
+    { value: 'LEGAL_MATTER', label: 'Legal' },
+    { value: 'NEWS', label: 'News' },
+  ];
+  if (isAdmin) {
+    sourceOptions.push({ value: 'INGESTION', label: 'Ingestion' });
+    sourceOptions.push({ value: 'SYSTEM', label: 'System' });
+  }
+
   return (
     <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -183,7 +225,7 @@ export default function AlertsPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 border-b border-gray-200 gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Anomaly Alerts</h1>
-            <p className="mt-1 text-sm text-gray-500">AI-generated alerts for unusual patterns across generation, documents, legal matters, and news.</p>
+            <p className="mt-1 text-sm text-gray-500">AI-generated alerts for unusual patterns across forecasts, documents, legal matters, and news.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
@@ -199,19 +241,17 @@ export default function AlertsPage() {
               onChange={(e) => setFilterSource(e.target.value)}
               className="rounded-md border-gray-200 py-1.5 pl-3 pr-8 text-xs font-semibold border focus:ring-brand focus:border-brand uppercase"
             >
-              <option value="ALL">All Sources</option>
-              <option value="GENERATION">Generation</option>
-              <option value="DOCUMENT">Documents</option>
-              <option value="LEGAL_MATTER">Legal</option>
-              <option value="NEWS">News</option>
+              {sourceOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </select>
             <select 
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               className="rounded-md border-gray-200 py-1.5 pl-3 pr-8 text-xs font-semibold border focus:ring-brand focus:border-brand uppercase"
             >
-              <option value="UNREVIEWED">Unreviewed Only</option>
-              <option value="ASSIGNED">Assigned</option>
+              <option value="UNRESOLVED">Unresolved</option>
+              <option value="RESOLVED">Resolved</option>
               <option value="ALL">All Alerts</option>
             </select>
           </div>
@@ -224,7 +264,6 @@ export default function AlertsPage() {
                 <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Entity / Source</th>
                 <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
                 <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
-                <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Deviation (σ)</th>
                 <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                 <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6 text-right"><span className="sr-only">Actions</span></th>
               </tr>
@@ -232,7 +271,7 @@ export default function AlertsPage() {
             <tbody className="divide-y divide-gray-200 bg-white">
               {filteredAlerts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-sm text-gray-500 italic">No alerts found for the selected criteria.</td>
+                  <td colSpan={5} className="py-12 text-center text-sm text-gray-500 italic">No alerts found for the selected criteria.</td>
                 </tr>
               ) : filteredAlerts.map((alert) => {
                 const sourceBadge = getSourceBadge(alert.source_type);
@@ -241,14 +280,12 @@ export default function AlertsPage() {
                     <tr 
                       onClick={() => toggleExpand(alert.id)}
                       className={`cursor-pointer transition-colors ${
-                        alert.status === 'UNREVIEWED' ? 'hover:bg-gray-50' :
-                        alert.status === 'ASSIGNED' ? 'bg-yellow-50/30 hover:bg-yellow-50/50' :
-                        'bg-gray-50/50'
+                        alert.status === 'UNRESOLVED' ? 'hover:bg-gray-50' : 'bg-gray-50/50'
                       }`}
                     >
                       <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-semibold text-gray-900">
                         <div className="flex items-center">
-                          {alert.status === 'UNREVIEWED' && <span className="h-2 w-2 rounded-full bg-red-600 animate-pulse mr-2.5"></span>}
+                          {alert.status === 'UNRESOLVED' && <span className="h-2 w-2 rounded-full bg-red-600 animate-pulse mr-2.5"></span>}
                           {getEntityName(alert)}
                         </div>
                       </td>
@@ -256,13 +293,6 @@ export default function AlertsPage() {
                       <td className="whitespace-nowrap px-3 py-4 text-sm">
                         <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset ${sourceBadge.color}`}>
                           {sourceBadge.label}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm">
-                        <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${
-                          alert.deviation_stddev >= 2 ? 'bg-red-50 text-red-700 ring-red-600/10' : 'bg-green-50 text-green-700 ring-green-600/20'
-                        }`}>
-                          {alert.alert_type.includes('LOW') || alert.alert_type.includes('ZERO') ? '-' : '+'}{alert.deviation_stddev}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-3 py-4 text-sm">
@@ -281,7 +311,7 @@ export default function AlertsPage() {
                     </tr>
                     {expandedId === alert.id && (
                       <tr className="bg-gray-50">
-                        <td colSpan={6} className="px-4 py-6">
+                        <td colSpan={5} className="px-4 py-6">
                           <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-inner">
                             <div className="flex justify-between items-start mb-4">
                               <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Detailed AI Analysis</h4>
@@ -291,13 +321,15 @@ export default function AlertsPage() {
                             </div>
 
                             {/* Source-specific info */}
-                            {alert.source_type !== 'GENERATION' && (
+                            {alert.source_type !== 'FORECAST' && (
                               <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
                                 <p className="text-[10px] font-bold text-gray-500 uppercase">Anomaly Source</p>
                                 <p className="text-xs text-gray-700 mt-1">
                                   {alert.source_type === 'DOCUMENT' && 'Discrepancy identified within uploaded documents.'}
                                   {alert.source_type === 'LEGAL_MATTER' && 'Conflict flagged from legal matter records.'}
                                   {alert.source_type === 'NEWS' && 'Conflict surfaced from news and updates.'}
+                                  {alert.source_type === 'INGESTION' && 'Data ingestion pipeline encountered an error.'}
+                                  {alert.source_type === 'SYSTEM' && 'System-wide infrastructure issue detected.'}
                                 </p>
                               </div>
                             )}
@@ -315,7 +347,7 @@ export default function AlertsPage() {
                               </div>
                             )}
 
-                            {(alert.status === 'UNREVIEWED' || alert.status === 'ASSIGNED') && (
+                            {alert.status === 'UNRESOLVED' && (
                               <div className="flex items-center gap-3 pt-4 border-t border-gray-100 flex-wrap">
                                 {!alert.assigned_to && (
                                   <button 
@@ -326,22 +358,10 @@ export default function AlertsPage() {
                                   </button>
                                 )}
                                 <button 
-                                  onClick={(e) => { e.stopPropagation(); updateStatus(alert.id, 'REVIEWED'); }}
+                                  onClick={(e) => { e.stopPropagation(); updateStatus(alert.id, 'RESOLVED'); }}
                                   className="px-4 py-2 text-xs font-bold text-white bg-brand rounded hover:opacity-90 transition-all shadow-sm"
                                 >
-                                  MARK AS REVIEWED
-                                </button>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); updateStatus(alert.id, 'RESOLVED'); }}
-                                  className="px-4 py-2 text-xs font-bold text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100 transition-all"
-                                >
                                   MARK RESOLVED
-                                </button>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); updateStatus(alert.id, 'DISMISSED'); }}
-                                  className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 rounded hover:bg-gray-200 transition-all"
-                                >
-                                  DISMISS ALERT
                                 </button>
                               </div>
                             )}

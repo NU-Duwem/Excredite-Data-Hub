@@ -10,7 +10,6 @@ const initialMessage = {
 };
 
 function parseInlineMarkdown(text: string) {
-  // Parse bold text "**something**"
   const parts = text.split(/(\*\*.*?\*\*)/g);
   
   return parts.map((part, index) => {
@@ -27,7 +26,6 @@ function renderMarkdown(content: string) {
   return lines.map((line, idx) => {
     const trimmed = line.trim();
     
-    // Headings
     if (trimmed.startsWith('### ')) {
       return (
         <h3 key={idx} className="text-base font-bold text-gray-900 mt-4 mb-2 first:mt-0">
@@ -49,53 +47,46 @@ function renderMarkdown(content: string) {
         </h1>
       );
     }
-    
-    // Bullet points
-    if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+    if (trimmed.startsWith('- ')) {
       return (
-        <ul key={idx} className="list-disc pl-5 my-1">
-          <li className="text-[15px] leading-relaxed text-gray-800">
-            {parseInlineMarkdown(trimmed.slice(2))}
-          </li>
-        </ul>
+        <li key={idx} className="ml-5 list-disc text-sm text-gray-700 mb-1">
+          {parseInlineMarkdown(trimmed.slice(2))}
+        </li>
       );
     }
-    
-    // Empty lines
     if (trimmed === '') {
-      return <div key={idx} className="h-2"></div>;
+      return <div key={idx} className="h-2" />;
     }
-    
-    // Default Paragraph
     return (
-      <p key={idx} className="text-[15px] leading-relaxed my-1 text-gray-800">
+      <p key={idx} className="text-[15px] leading-relaxed mb-2 last:mb-0">
         {parseInlineMarkdown(line)}
       </p>
     );
   });
 }
 
-export default function AIQueryInterface() {
+export default function QueryPage() {
   const [query, setQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const responseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
-  // Mock conversation state
   const [messages, setMessages] = useState([initialMessage]);
+  const [showDocDropdown, setShowDocDropdown] = useState(false);
+  const [docNotification, setDocNotification] = useState<{ title: string; section: string; tab: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isSubmitting]);
+  }, [messages, isSubmitting, docNotification]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || isSubmitting) return;
 
-    const userMessage = { id: Date.now(), role: 'user', content: query };
+    const userQuery = query;
+    const userMessage = { id: Date.now(), role: 'user', content: userQuery };
     const updatedMessages = [...messages, userMessage];
 
-    // Add user message to UI
     setMessages(updatedMessages);
     setQuery('');
     setIsSubmitting(true);
@@ -123,6 +114,20 @@ export default function AIQueryInterface() {
           role: 'assistant', 
           content: data.content 
         }]);
+
+        // If query asks for document creation or output, trigger notification
+        if (
+          userQuery.toLowerCase().includes('generate') ||
+          userQuery.toLowerCase().includes('document') ||
+          userQuery.toLowerCase().includes('report') ||
+          userQuery.toLowerCase().includes('create')
+        ) {
+          setDocNotification({
+            title: `Output generated for: "${userQuery.slice(0, 40)}..."`,
+            section: 'Document Generator',
+            tab: 'document-generator',
+          });
+        }
       }
     } catch (err) {
       setMessages(prev => [...prev, { 
@@ -144,11 +149,12 @@ export default function AIQueryInterface() {
     setQuery('');
     setIsSubmitting(false);
     setMessages([{ ...initialMessage }]);
+    setDocNotification(null);
   };
 
   return (
     <main className="flex-1 flex flex-col h-full bg-white relative">
-      {/* Mobile Header (visible only on mobile) */}
+      {/* Mobile Header */}
       <div className="md:hidden h-16 flex items-center px-4 border-b border-gray-200 bg-white shadow-sm">
         <button type="button" className="text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand">
           <span className="sr-only">Open sidebar</span>
@@ -163,10 +169,10 @@ export default function AIQueryInterface() {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center">
         <div className="max-w-3xl w-full flex-1 flex flex-col">
           
-          <div className="flex justify-between items-end mb-8">
+          <div className="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
              <div>
-               <h1 className="text-2xl font-semibold text-gray-900">AI Query Interface</h1>
-               <p className="mt-1 text-sm text-gray-500">Ask questions about generation, tariffs, or regulations.</p>
+               <h1 className="text-xl font-bold text-gray-900 tracking-tight">AI Query Interface</h1>
+               <p className="text-xs text-gray-500 mt-0.5">Ask questions and analyze power sector data.</p>
              </div>
              <button
                type="button"
@@ -177,17 +183,51 @@ export default function AIQueryInterface() {
              </button>
           </div>
 
-          {/* Quick Links to related sections */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            <Link
-              href="/documents"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-brand/5 hover:border-brand/30 hover:text-brand transition-colors"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-              </svg>
-              Documents
-            </Link>
+          {/* Quick Links with Document Functionality Dropdown */}
+          <div className="flex flex-wrap items-center gap-2 mb-6 relative">
+            {/* Document Dropdown Button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowDocDropdown(!showDocDropdown)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-brand/5 hover:border-brand/30 hover:text-brand transition-colors"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                Documents
+                <svg className={`h-3 w-3 transition-transform ${showDocDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showDocDropdown && (
+                <div className="absolute left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2">
+                  <Link
+                    href="/documents?tab=upload"
+                    onClick={() => setShowDocDropdown(false)}
+                    className="flex items-center px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-brand/10 hover:text-brand transition-colors"
+                  >
+                    Upload Document
+                  </Link>
+                  <Link
+                    href="/documents?tab=view-document"
+                    onClick={() => setShowDocDropdown(false)}
+                    className="flex items-center px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-brand/10 hover:text-brand transition-colors"
+                  >
+                    View Document
+                  </Link>
+                  <Link
+                    href="/documents?tab=document-generator"
+                    onClick={() => setShowDocDropdown(false)}
+                    className="flex items-center px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-brand/10 hover:text-brand transition-colors"
+                  >
+                    Document Generator
+                  </Link>
+                </div>
+              )}
+            </div>
+
             <Link
               href="/matters"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-brand/5 hover:border-brand/30 hover:text-brand transition-colors"
@@ -241,6 +281,28 @@ export default function AIQueryInterface() {
                 </div>
               </div>
             ))}
+
+            {/* Notification after document creation */}
+            {docNotification && (
+              <div className="p-4 bg-brand/10 border-2 border-brand rounded-xl shadow-md flex items-center justify-between animate-pulse">
+                <div className="flex items-center space-x-3">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-brand"></span>
+                  </span>
+                  <div>
+                    <p className="text-xs font-bold text-gray-900">{docNotification.title}</p>
+                    <p className="text-[10px] text-gray-600 font-medium">Output ready in {docNotification.section}</p>
+                  </div>
+                </div>
+                <Link
+                  href={`/documents?tab=${docNotification.tab}`}
+                  className="px-3 py-1.5 bg-brand text-white text-xs font-bold rounded-lg hover:opacity-90 transition-all uppercase tracking-wider shrink-0"
+                >
+                  View Output →
+                </Link>
+              </div>
+            )}
             
             {isSubmitting && (
               <div className="flex justify-start">
@@ -258,7 +320,7 @@ export default function AIQueryInterface() {
         </div>
       </div>
 
-      {/* Input Area (Fixed to bottom) */}
+      {/* Input Area */}
       <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto">
           <form onSubmit={handleSubmit} className="relative flex items-center">
@@ -272,7 +334,7 @@ export default function AIQueryInterface() {
                   handleSubmit(e);
                 }
               }}
-              placeholder="E.g., What was the total generation output last week?"
+              placeholder="E.g., Generate a document analyzing grid instability Q1 2026..."
               className="block w-full resize-none rounded-xl border-gray-300 shadow-sm focus:border-brand focus:ring-brand bg-gray-50 py-4 pl-4 pr-16 text-[15px] text-gray-900 border focus:bg-white transition-colors"
               style={{ minHeight: '56px', maxHeight: '150px' }}
               disabled={isSubmitting}

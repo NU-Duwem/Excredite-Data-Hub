@@ -9,10 +9,8 @@ interface Matter {
   client: string;
   type: string;
   status: 'ACTIVE' | 'ON_HOLD' | 'CLOSED' | 'APPEAL';
-  priority: 'HIGH' | 'MEDIUM' | 'LOW';
   counsel: string;
-  deadline: string;
-  stage: number; // 1-4 for status flow
+  stage: number;
 }
 
 export default function MattersPage() {
@@ -25,12 +23,25 @@ export default function MattersPage() {
   const [relatedDocs, setRelatedDocs] = useState<any[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
 
+  // New Matter Modal state
+  const [showNewMatterModal, setShowNewMatterModal] = useState(false);
+  const [newMatterForm, setNewMatterForm] = useState({
+    client: '',
+    reference: '',
+    matterType: 'LITIGATION',
+    title: '',
+    counsel: '',
+    status: 'ACTIVE',
+  });
+  const [savingMatter, setSavingMatter] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+
   const supabase = createClient();
 
   const mockMatters: Matter[] = [
-    { id: '1', ref: 'LIT/2025/08', client: 'AEDC', type: 'Tariff Dispute', status: 'ACTIVE', priority: 'HIGH', counsel: 'B. Ekpo', deadline: '2026-06-01', stage: 2 },
-    { id: '2', ref: 'REG/2025/12', client: 'Mainstream', type: 'Compliance', status: 'ON_HOLD', priority: 'MEDIUM', counsel: 'J. Doe', deadline: '2026-05-20', stage: 1 },
-    { id: '3', ref: 'APP/2026/01', client: 'Egbin Thermal', type: 'Contractual', status: 'APPEAL', priority: 'HIGH', counsel: 'B. Ekpo', deadline: '2026-07-15', stage: 3 },
+    { id: '1', ref: 'LIT/2025/08', client: 'AEDC', type: 'Tariff Dispute', status: 'ACTIVE', counsel: 'B. Ekpo', stage: 2 },
+    { id: '2', ref: 'REG/2025/12', client: 'Mainstream', type: 'Compliance', status: 'ON_HOLD', counsel: 'J. Doe', stage: 1 },
+    { id: '3', ref: 'APP/2026/01', client: 'Egbin Thermal', type: 'Contractual', status: 'APPEAL', counsel: 'B. Ekpo', stage: 3 },
   ];
 
   // Fetch permissions
@@ -38,7 +49,7 @@ export default function MattersPage() {
     const checkPermissions = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (user?.user_metadata?.role === 'power_legal' || user?.user_metadata?.role === 'admin') {
+        if (user?.user_metadata?.role === 'power_legal' || user?.user_metadata?.role === 'admin' || user?.user_metadata?.role === 'power_admin') {
           setCanCreate(true);
         }
       } catch (error) {
@@ -62,7 +73,6 @@ export default function MattersPage() {
             title,
             status,
             lead_counsel,
-            next_deadline,
             organisations (
               short_name
             )
@@ -75,9 +85,7 @@ export default function MattersPage() {
             client: (m.organisations as any)?.short_name || 'N/A',
             type: m.matter_type.replace(/_/g, ' '),
             status: m.status as any,
-            priority: 'HIGH',
             counsel: m.lead_counsel || 'N/A',
-            deadline: m.next_deadline || 'N/A',
             stage: m.status === 'ACTIVE' ? 2 : m.status === 'ON_HOLD' ? 1 : 4,
           }));
           setMattersList(formatted);
@@ -100,7 +108,6 @@ export default function MattersPage() {
       const fetchRelatedDocs = async () => {
         setDocsLoading(true);
         try {
-          // Attempt query if it's a real UUID (length 36) or fallback to ref code
           const isRealUuid = selectedMatter.id.length === 36;
           const query = supabase
             .from('documents')
@@ -109,7 +116,6 @@ export default function MattersPage() {
           if (isRealUuid) {
             query.eq('matter_id', selectedMatter.id);
           } else {
-            // For mock data fallback, query by keywords/title matching ref code
             query.ilike('title', `%${selectedMatter.client}%`);
           }
 
@@ -132,6 +138,61 @@ export default function MattersPage() {
     }
   }, [selectedMatter, supabase]);
 
+  // Save new matter
+  const handleSaveNewMatter = async () => {
+    if (!newMatterForm.title || !newMatterForm.client) return;
+    setSavingMatter(true);
+    setSaveMessage('');
+    try {
+      // Look up client org by name
+      const { data: org } = await supabase
+        .from('organisations')
+        .select('id')
+        .ilike('short_name', `%${newMatterForm.client}%`)
+        .limit(1)
+        .single();
+
+      const { data, error } = await supabase
+        .from('matters')
+        .insert({
+          client_id: org?.id || null,
+          matter_reference: newMatterForm.reference || null,
+          matter_type: newMatterForm.matterType,
+          title: newMatterForm.title,
+          status: newMatterForm.status,
+          lead_counsel: newMatterForm.counsel || null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        setSaveMessage(`Error: ${error.message}`);
+      } else {
+        setSaveMessage('Matter created successfully!');
+        // Add to local list
+        const newItem: Matter = {
+          id: data.id,
+          ref: data.matter_reference || 'N/A',
+          client: newMatterForm.client,
+          type: newMatterForm.matterType.replace(/_/g, ' '),
+          status: data.status as any,
+          counsel: data.lead_counsel || 'N/A',
+          stage: 1,
+        };
+        setMattersList(prev => [newItem, ...prev]);
+        setTimeout(() => {
+          setShowNewMatterModal(false);
+          setNewMatterForm({ client: '', reference: '', matterType: 'LITIGATION', title: '', counsel: '', status: 'ACTIVE' });
+          setSaveMessage('');
+        }, 1500);
+      }
+    } catch (err: any) {
+      setSaveMessage(`Error: ${err.message}`);
+    } finally {
+      setSavingMatter(false);
+    }
+  };
+
   const stages = ['Filing', 'Discovery', 'Hearing', 'Judgment'];
 
   return (
@@ -144,7 +205,10 @@ export default function MattersPage() {
             <p className="mt-1 text-sm text-gray-500">Professional case management and litigation tracking.</p>
           </div>
           {canCreate && (
-            <button className="bg-brand text-white rounded-lg px-4 py-2 text-xs font-bold hover:opacity-90 transition-all shadow-sm uppercase tracking-wider">
+            <button
+              onClick={() => setShowNewMatterModal(true)}
+              className="bg-brand text-white rounded-lg px-4 py-2 text-xs font-bold hover:opacity-90 transition-all shadow-sm uppercase tracking-wider"
+            >
               + Open New Matter
             </button>
           )}
@@ -186,7 +250,7 @@ export default function MattersPage() {
               </div>
             </div>
 
-            {/* Related Documents section (Two-way Traceability loop) */}
+            {/* Related Documents */}
             <div className="pt-6 border-t border-gray-100">
               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Related Documents</h4>
               {docsLoading ? (
@@ -223,11 +287,6 @@ export default function MattersPage() {
         <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-xl overflow-hidden border border-gray-100">
           <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
             <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Active Matter Registry</h2>
-            <div className="flex gap-2">
-               <button className="text-[10px] font-bold text-gray-500 hover:text-brand transition-colors uppercase">Sort by Priority</button>
-               <span className="text-gray-300">|</span>
-               <button className="text-[10px] font-bold text-gray-500 hover:text-brand transition-colors uppercase">Filter by Client</button>
-            </div>
           </div>
           {mattersLoading ? (
             <div className="p-8 text-center">
@@ -240,10 +299,8 @@ export default function MattersPage() {
                 <tr>
                   <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reference</th>
                   <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Client</th>
-                  <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Priority</th>
                   <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Lead Counsel</th>
-                  <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Next Deadline</th>
+                  <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Counsel</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
@@ -256,13 +313,6 @@ export default function MattersPage() {
                     <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-bold text-brand">{matter.ref}</td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900 font-semibold">{matter.client}</td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                        matter.priority === 'HIGH' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {matter.priority}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-4 text-sm">
                       <span className={`inline-flex items-center rounded px-2 py-1 text-[10px] font-bold ring-1 ring-inset ${
                         matter.status === 'ACTIVE' ? 'bg-green-50 text-green-700 ring-green-600/20' : 
                         matter.status === 'APPEAL' ? 'bg-blue-50 text-blue-700 ring-blue-600/20' :
@@ -272,7 +322,6 @@ export default function MattersPage() {
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 font-medium">{matter.counsel}</td>
-                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900 font-bold">{matter.deadline}</td>
                   </tr>
                 ))}
               </tbody>
@@ -280,6 +329,118 @@ export default function MattersPage() {
           )}
         </div>
       </div>
+
+      {/* New Matter Modal */}
+      {showNewMatterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Open New Legal Matter</h3>
+              <button onClick={() => { setShowNewMatterModal(false); setSaveMessage(''); }} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Title *</label>
+                <input
+                  type="text"
+                  value={newMatterForm.title}
+                  onChange={(e) => setNewMatterForm(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="e.g. DISCO Tariff Dispute Appeal"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Client *</label>
+                  <input
+                    type="text"
+                    value={newMatterForm.client}
+                    onChange={(e) => setNewMatterForm(prev => ({ ...prev, client: e.target.value }))}
+                    placeholder="e.g. AEDC"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Reference Code</label>
+                  <input
+                    type="text"
+                    value={newMatterForm.reference}
+                    onChange={(e) => setNewMatterForm(prev => ({ ...prev, reference: e.target.value }))}
+                    placeholder="e.g. LIT/2026/01"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent outline-none"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Matter Type</label>
+                  <select
+                    value={newMatterForm.matterType}
+                    onChange={(e) => setNewMatterForm(prev => ({ ...prev, matterType: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-brand focus:border-brand"
+                  >
+                    <option value="LITIGATION">Litigation</option>
+                    <option value="ARBITRATION">Arbitration</option>
+                    <option value="REGULATORY_ADVISORY">Regulatory Advisory</option>
+                    <option value="LICENSING">Licensing</option>
+                    <option value="TARIFF_DISPUTE">Tariff Dispute</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Status</label>
+                  <select
+                    value={newMatterForm.status}
+                    onChange={(e) => setNewMatterForm(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-brand focus:border-brand"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="ON_HOLD">On Hold</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="CLOSED">Closed</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Counsel</label>
+                <input
+                  type="text"
+                  value={newMatterForm.counsel}
+                  onChange={(e) => setNewMatterForm(prev => ({ ...prev, counsel: e.target.value }))}
+                  placeholder="e.g. B. Ekpo"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent outline-none"
+                />
+              </div>
+
+              {saveMessage && (
+                <p className={`text-xs font-medium ${saveMessage.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
+                  {saveMessage}
+                </p>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => { setShowNewMatterModal(false); setSaveMessage(''); }}
+                  className="flex-1 py-2.5 text-xs font-bold text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors uppercase"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveNewMatter}
+                  disabled={savingMatter || !newMatterForm.title || !newMatterForm.client}
+                  className="flex-1 py-2.5 bg-brand text-white text-xs font-bold rounded-lg hover:opacity-90 shadow-sm transition-all uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingMatter ? 'Saving...' : 'Create Matter'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -117,7 +117,7 @@ export default function NewsPage() {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Search */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 max-w-md">
             <input
@@ -130,21 +130,6 @@ export default function NewsPage() {
             <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-          </div>
-          <div className="flex gap-2">
-            {uniqueSources.map(source => (
-              <button
-                key={source}
-                onClick={() => setFilterSource(source)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-colors ${
-                  filterSource === source
-                    ? 'bg-brand text-white border-brand'
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                {source}
-              </button>
-            ))}
           </div>
         </div>
 

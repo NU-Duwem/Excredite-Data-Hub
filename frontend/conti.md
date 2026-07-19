@@ -42,3 +42,35 @@ o "Link to Legal Matter" detailed design- Toggle control -"Link to a Legal Mat
 **\- AI query interface​**\- Should be linked to Documents, Legal matters and News and Updates.
 
 **\- Profile & settings- Remove “Power” in roles for all users e.g. Power CEO should be just CEO- Reset password sequence should be split into two options- “Update password” and “Forgot password”. They should both be buttons that bring up or open up the appropriate forms when clicked.- User profile “CHIEF” to “CEO” across the board.- Name change “Expo” to “Ekpo” it should reflect in the emails.**
+
+
+
+
+####update3
+**Document**
+
+• Add a subtitle under the 'Document Configuration' heading — a short descriptive line explaining the panel's purpose, e.g. 'Define parameters to compile documents from the repository,' rewritten to reference 'Keywords' and 'Documents' rather than older terminology. • Add a search icon inside the Keywords input field (left-aligned, magnifying-glass style), so it visually reads as a search input rather than a plain text field. • Add scope-guidance helper text above the Generate button — an inline message that appears when filters are incomplete, such as '⚠ Configure filters above to see scope,' referencing 'Generate Document.' • Add a 'Save configuration' link below the Generate button, allowing users to save and reuse their current filter setup. • Generate button – enabled once the user inputs a document title. • Ensure both empty states exist for the Document Preview panel: an 'Awaiting Input' state shown before any generation starts, and a distinct loading/generating state (e.g. skeleton placeholder bars) shown while a document is being compiled."• Include a box for specifying the title of the intended document to be created and implement the necessary logic.• Title is the only necessary requirement to generate a document. Other parameters can be unspecified if the user deems it fit. Meaning documents can be created without necessarily referencing the documents or files in the database.• Remove “all-time” from date range in Document Generator.• Keywords and Data Categories are automatically selected by the AI.• Share, Edit login and button should be available once the document is created in Document Generator.• Remove “Privileged” or “legal\_privileged” from the classes of document. Documents classes should only be visible to admin.• Remove the tab “AI Query Outputs”, generated documents should appear in the “Document Generator” tab.• Option to select output format when generating a document i.e. PDF, DOCX, Spreadsheet, On-screen
+
+**AI Query Interface**
+
+• Queries requesting for document availability or creation get created and output in the appropriate Document page section. i.e. this happens after a logic checks if tasks was successful.• Document button should give options of the various functionalities it has i.e. Upload, View Document, Document Generator and each option when clicked links to that section in the Documents page.• Notification after document creation or availability e.g an icon on top the Documents Icon and links in other pages. Clicking it takes one to the appropriate section. The button should blink when task is complete and output is ready ( for visual feedback).
+
+**News & Updates**
+
+• Remove the buttons beside the search bar i.e. All, NERC, NBET, TCN, BusinessDay, Vanguard.**• Legal Matters**• Remove the “Priority” column• Remove “Next deadline”• Change “Lead counsel” to “Counsel”• Button and sequence for inputting legal matters into the database via the legal matters page.
+
+**Left pane arrangement.**
+
+• AI Query Interface• Conversation History• Documents• News & Updates• Legal Matters• Anomaly Alerts• Forecasts• Admin panel• Profile & Settings• The above should be the arrangement of the left pane for all users, admin panel should be visible only to the admin.
+
+**UI/UX**
+
+• Distinct visual feedback when items on the left pane are hovered over or/and selected.• Distinct visual feedback when icons across the site are hovered over or/and selected.• Colour should not be monochromatic - use different but complementary colours across the site, but maintain the theme colour for important features.
+
+**Conversation History**
+
+• Give more options for history duration• Remove the tags from Saved AI sessions i.e. generation, regulatory, tariffs, gas/thermal• Selecting a previous search should automatically open a pane in the Conversation History tab in order for the user to view it
+
+**Anomaly Alerts**
+
+• Remove “Deviation” column• Status should either be Resolved, or unresolved• Unreviewed, Assigned, All alerts should be Resolved or Unresolved.• Sources – remove “Generation”, replace with “Forecast”• Ingestion problems, system wide problems should appear here and be visible to only the admin.

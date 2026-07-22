@@ -5,16 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-const roleDisplayNames: Record<string, string> = {
-  power_admin: 'System Admin',
-  power_ceo: 'CEO',
-  power_legal: 'Legal Expert',
-  power_analyst: 'Research Analyst',
-  power_app: 'IT Expert',
-  power_ingestion: 'Ingestion Operator',
-  power_team: 'Team Member',
-  power_ai: 'AI Assistant',
-};
+import { getRoleDisplayName } from '@/utils/roles';
 
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
@@ -200,7 +191,7 @@ export default function ProfilePage() {
               <p className="text-sm text-gray-500 mb-6">{userEmail}</p>
               
               <div className="inline-flex items-center px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-bold uppercase tracking-wider">
-                {roleDisplayNames[userRole] || userRole.replace('power_', '').replace('_', ' ')}
+                {getRoleDisplayName(userRole)}
               </div>
 
               <div className="mt-8 pt-6 border-t border-gray-100">

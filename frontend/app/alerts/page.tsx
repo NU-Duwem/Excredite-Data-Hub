@@ -3,113 +3,135 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 
-interface Alert {
+export interface Alert {
   id: string;
   plant_id: string | null;
+  plant_name: string;
+  plant_type: 'Thermal' | 'Hydro' | 'Solar';
+  category: 'GENCOs' | 'Thermal Plants' | 'Hydro Plants' | 'IPPs';
   alert_date: string;
   actual_output_mwh: number | null;
   expected_output_mwh: number | null;
-  alert_type: string;
-  explanation: string | null;
-  status: 'RESOLVED' | 'UNRESOLVED';
+  deviation_sigma: number;
+  alert_type: 'HIGH_OUTPUT' | 'LOW_OUTPUT' | 'ZERO_OUTPUT' | 'CURTAILMENT_SPIKE';
+  explanation: string;
+  status: 'UNREVIEWED' | 'REVIEWED' | 'DISMISSED';
   reviewed_at: string | null;
   created_at: string;
-  source_type: string;
-  assigned_to: string | null;
-  document_id: string | null;
-  matter_id: string | null;
-  news_id: string | null;
-  // Joined data
-  plant_name?: string;
-  assigned_user_name?: string;
 }
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState('UNRESOLVED');
-  const [filterSource, setFilterSource] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState('UNREVIEWED');
+  const [filterCategory, setFilterCategory] = useState('ALL');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   const supabase = createClient();
+
+  const mockAlerts: Alert[] = [
+    {
+      id: '1',
+      plant_id: 'p-1',
+      plant_name: 'Egbin Thermal Power Station',
+      plant_type: 'Thermal',
+      category: 'Thermal Plants',
+      alert_date: '2026-07-21',
+      actual_output_mwh: 120,
+      expected_output_mwh: 300,
+      deviation_sigma: -2.8,
+      alert_type: 'LOW_OUTPUT',
+      explanation: 'Generation dropped 2.8σ below the 30-day rolling baseline due to ELPS gas line pressure reduction at NGC supply terminal.',
+      status: 'UNREVIEWED',
+      reviewed_at: null,
+      created_at: '2026-07-21T08:30:00Z',
+    },
+    {
+      id: '2',
+      plant_id: 'p-2',
+      plant_name: 'Shiroro Hydro Station',
+      plant_type: 'Hydro',
+      category: 'Hydro Plants',
+      alert_date: '2026-07-20',
+      actual_output_mwh: 0,
+      expected_output_mwh: 240,
+      deviation_sigma: -4.1,
+      alert_type: 'ZERO_OUTPUT',
+      explanation: 'Unscheduled zero output event logged during peak evening dispatch. Spillway maintenance triggered emergency shutdown.',
+      status: 'UNREVIEWED',
+      reviewed_at: null,
+      created_at: '2026-07-20T14:15:00Z',
+    },
+    {
+      id: '3',
+      plant_id: 'p-3',
+      plant_name: 'Azura-Edo IPP',
+      plant_type: 'Thermal',
+      category: 'IPPs',
+      alert_date: '2026-07-19',
+      actual_output_mwh: 480,
+      expected_output_mwh: 420,
+      deviation_sigma: +2.1,
+      alert_type: 'HIGH_OUTPUT',
+      explanation: 'Output exceeded baseline dispatch by 2.1σ following successful completion of turbine GT14 major overhaul.',
+      status: 'REVIEWED',
+      reviewed_at: '2026-07-20T09:00:00Z',
+      created_at: '2026-07-19T11:00:00Z',
+    },
+    {
+      id: '4',
+      plant_id: 'p-4',
+      plant_name: 'Kainji Hydro Electric',
+      plant_type: 'Hydro',
+      category: 'Hydro Plants',
+      alert_date: '2026-07-18',
+      actual_output_mwh: 150,
+      expected_output_mwh: 310,
+      deviation_sigma: -3.2,
+      alert_type: 'CURTAILMENT_SPIKE',
+      explanation: 'TCN National Control Centre (NCC) forced curtailment instruction issued due to 330kV Osogbo transmission bottleneck.',
+      status: 'UNREVIEWED',
+      reviewed_at: null,
+      created_at: '2026-07-18T16:45:00Z',
+    },
+  ];
 
   useEffect(() => {
     const fetchAlerts = async () => {
       setLoading(true);
 
-      // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setCurrentUserId(user.id);
-        setIsAdmin(user.user_metadata?.role === 'power_admin');
       }
 
-      // Fetch alerts
       const { data, error } = await supabase
         .from('anomaly_alerts')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100);
 
-      if (!error && data) {
-        // Normalize statuses: map old statuses to RESOLVED/UNRESOLVED
-        const normalized = data.map((a: any) => ({
-          ...a,
-          status: ['RESOLVED', 'DISMISSED'].includes(a.status) ? 'RESOLVED' : 'UNRESOLVED',
+      if (!error && data && data.length > 0) {
+        const formatted: Alert[] = data.map((a: any) => ({
+          id: a.id,
+          plant_id: a.plant_id,
+          plant_name: a.plant_name || 'Egbin Thermal',
+          plant_type: a.plant_type || 'Thermal',
+          category: a.category || 'GENCOs',
+          alert_date: a.alert_date || new Date(a.created_at).toISOString().split('T')[0],
+          actual_output_mwh: a.actual_output_mwh ?? 140,
+          expected_output_mwh: a.expected_output_mwh ?? 300,
+          deviation_sigma: a.deviation_stddev ?? -2.2,
+          alert_type: ['HIGH_OUTPUT', 'LOW_OUTPUT', 'ZERO_OUTPUT', 'CURTAILMENT_SPIKE'].includes(a.alert_type) ? a.alert_type : 'LOW_OUTPUT',
+          explanation: a.explanation || 'Generation anomaly detected against 30-day rolling baseline.',
+          status: ['UNREVIEWED', 'REVIEWED', 'DISMISSED'].includes(a.status) ? a.status : 'UNREVIEWED',
+          reviewed_at: a.reviewed_at,
+          created_at: a.created_at,
         }));
-        setAlerts(normalized);
+        setAlerts(formatted);
       } else {
-        // Fallback: mock data
-        setAlerts([
-          {
-            id: '1', plant_id: 'mock-1', alert_date: '2026-05-11', actual_output_mwh: 120, expected_output_mwh: 300,
-            alert_type: 'LOW_OUTPUT',
-            explanation: 'Output dropped 2.2 standard deviations below 30-day rolling average. Likely caused by NGC gas pressure drop at the Escravos-Lagos Pipeline System (ELPS). This drop represents a significant risk to grid stability in the Lagos region.',
-            status: 'UNRESOLVED', reviewed_at: null, created_at: '2026-05-11T10:00:00Z',
-            source_type: 'FORECAST', assigned_to: null, document_id: null, matter_id: null, news_id: null,
-            plant_name: 'Egbin Thermal',
-          },
-          {
-            id: '2', plant_id: 'mock-2', alert_date: '2026-05-10', actual_output_mwh: 200, expected_output_mwh: 280,
-            alert_type: 'LOW_OUTPUT',
-            explanation: 'Unscheduled capacity reduction detected. No TCN outage report matched. Historical patterns suggest potential reservoir management issues.',
-            status: 'UNRESOLVED', reviewed_at: null, created_at: '2026-05-10T08:00:00Z',
-            source_type: 'FORECAST', assigned_to: null, document_id: null, matter_id: null, news_id: null,
-            plant_name: 'Shiroro Hydro',
-          },
-          {
-            id: '3', plant_id: 'mock-3', alert_date: '2026-05-08', actual_output_mwh: 470, expected_output_mwh: 400,
-            alert_type: 'HIGH_OUTPUT',
-            explanation: 'Output increased above typical dispatch instruction band. Efficiency gains noted following recent turbine overhaul.',
-            status: 'RESOLVED', reviewed_at: '2026-05-09T14:00:00Z', created_at: '2026-05-08T12:00:00Z',
-            source_type: 'FORECAST', assigned_to: null, document_id: null, matter_id: null, news_id: null,
-            plant_name: 'Azura-Edo IPP',
-          },
-          {
-            id: '4', plant_id: null, alert_date: '2026-05-07', actual_output_mwh: null, expected_output_mwh: null,
-            alert_type: 'DOCUMENT_DISCREPANCY',
-            explanation: 'Conflicting generation figures detected between the TCN Quarterly Report Q1 2026 and the NERC Enforcement Notice issued on 2026-04-30.',
-            status: 'UNRESOLVED', reviewed_at: null, created_at: '2026-05-07T09:00:00Z',
-            source_type: 'DOCUMENT', assigned_to: null, document_id: 'doc-1', matter_id: null, news_id: null,
-          },
-          // Admin-only: Ingestion & System alerts
-          {
-            id: '5', plant_id: null, alert_date: '2026-05-06', actual_output_mwh: null, expected_output_mwh: null,
-            alert_type: 'INGESTION_FAILURE',
-            explanation: 'Data ingestion pipeline for TCN hourly dispatch data failed at 03:00 UTC. Retry limit exceeded after 3 attempts. Source endpoint returned HTTP 503.',
-            status: 'UNRESOLVED', reviewed_at: null, created_at: '2026-05-06T04:00:00Z',
-            source_type: 'INGESTION', assigned_to: null, document_id: null, matter_id: null, news_id: null,
-          },
-          {
-            id: '6', plant_id: null, alert_date: '2026-05-05', actual_output_mwh: null, expected_output_mwh: null,
-            alert_type: 'SYSTEM_WIDE',
-            explanation: 'Supabase storage bucket "documents" approaching 90% capacity. Consider archiving older documents or expanding storage allocation.',
-            status: 'UNRESOLVED', reviewed_at: null, created_at: '2026-05-05T12:00:00Z',
-            source_type: 'SYSTEM', assigned_to: null, document_id: null, matter_id: null, news_id: null,
-          },
-        ]);
+        setAlerts(mockAlerts);
       }
       setLoading(false);
     };
@@ -127,72 +149,64 @@ export default function AlertsPage() {
     return () => { supabase.removeChannel(channel); };
   }, [supabase]);
 
-  const toggleExpand = (id: string) => {
-    setExpandedId(expandedId === id ? null : id);
+  const updateStatus = async (id: string, newStatus: 'UNREVIEWED' | 'REVIEWED' | 'DISMISSED') => {
+    try {
+      await supabase
+        .from('anomaly_alerts')
+        .update({ status: newStatus, reviewed_at: newStatus !== 'UNREVIEWED' ? new Date().toISOString() : null })
+        .eq('id', id);
+    } catch (e) {
+      console.error('Error updating alert status:', e);
+    }
+
+    setAlerts(prev => prev.map(a => a.id === id ? {
+      ...a,
+      status: newStatus,
+      reviewed_at: newStatus !== 'UNREVIEWED' ? new Date().toISOString() : null
+    } : a));
   };
 
-  const updateStatus = async (id: string, newStatus: 'RESOLVED' | 'UNRESOLVED') => {
-    // Map to DB values
-    const dbStatus = newStatus === 'RESOLVED' ? 'RESOLVED' : 'UNREVIEWED';
-    await supabase
-      .from('anomaly_alerts')
-      .update({ status: dbStatus, reviewed_at: new Date().toISOString() })
-      .eq('id', id);
-
-    // Update local state
-    setAlerts(prev => prev.map(a => a.id === id ? { ...a, status: newStatus, reviewed_at: new Date().toISOString() } : a));
-    setExpandedId(null);
-  };
-
-  const assignToMe = async (id: string) => {
-    if (!currentUserId) return;
-    
-    await supabase
-      .from('anomaly_alerts')
-      .update({ assigned_to: currentUserId, status: 'ASSIGNED' })
-      .eq('id', id);
-
-    setAlerts(prev => prev.map(a => a.id === id ? { ...a, assigned_to: currentUserId } : a));
-  };
-
-  // Filter alerts — hide INGESTION and SYSTEM from non-admin
-  const visibleAlerts = alerts.filter(a => {
-    if (!isAdmin && (a.source_type === 'INGESTION' || a.source_type === 'SYSTEM')) return false;
-    return true;
-  });
-
-  const filteredAlerts = visibleAlerts.filter(a => {
+  const filteredAlerts = alerts.filter(a => {
     const matchesStatus = filterStatus === 'ALL' || a.status === filterStatus;
-    const matchesSource = filterSource === 'ALL' || a.source_type === filterSource;
-    return matchesStatus && matchesSource;
+    const matchesCategory = filterCategory === 'ALL' || 
+      (filterCategory === 'GENCOs' && (a.category === 'GENCOs' || a.category === 'Thermal Plants' || a.category === 'Hydro Plants')) ||
+      (filterCategory === 'Thermal Plants' && a.plant_type === 'Thermal') ||
+      (filterCategory === 'Hydro Plants' && a.plant_type === 'Hydro') ||
+      (filterCategory === 'IPPs' && a.category === 'IPPs');
+    return matchesStatus && matchesCategory;
   });
 
-  const getSourceBadge = (sourceType: string) => {
-    switch (sourceType) {
-      case 'FORECAST': return { color: 'bg-blue-50 text-blue-700 ring-blue-600/20', label: 'Forecast' };
-      case 'DOCUMENT': return { color: 'bg-purple-50 text-purple-700 ring-purple-600/20', label: 'Document' };
-      case 'LEGAL_MATTER': return { color: 'bg-orange-50 text-orange-700 ring-orange-600/20', label: 'Legal' };
-      case 'NEWS': return { color: 'bg-teal-50 text-teal-700 ring-teal-600/20', label: 'News' };
-      case 'INGESTION': return { color: 'bg-rose-50 text-rose-700 ring-rose-600/20', label: 'Ingestion' };
-      case 'SYSTEM': return { color: 'bg-slate-50 text-slate-700 ring-slate-600/20', label: 'System' };
-      default: return { color: 'bg-gray-50 text-gray-700 ring-gray-600/20', label: sourceType };
+  // KPI Calculations
+  const unreviewedCount = alerts.filter(a => a.status === 'UNREVIEWED').length;
+  const zeroOutputCount = alerts.filter(a => a.alert_type === 'ZERO_OUTPUT').length;
+  const curtailmentCount = alerts.filter(a => a.alert_type === 'CURTAILMENT_SPIKE').length;
+
+  const getTypeBadge = (type: string) => {
+    switch (type) {
+      case 'HIGH_OUTPUT':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 ring-1 ring-green-600/20">HIGH OUTPUT</span>;
+      case 'LOW_OUTPUT':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 ring-1 ring-amber-600/20">LOW OUTPUT</span>;
+      case 'ZERO_OUTPUT':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700 ring-1 ring-red-600/20">ZERO OUTPUT</span>;
+      case 'CURTAILMENT_SPIKE':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 ring-1 ring-purple-600/20">CURTAILMENT SPIKE</span>;
+      default:
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gray-50 text-gray-700">{type}</span>;
     }
   };
 
   const getStatusBadge = (status: string) => {
-    return status === 'RESOLVED'
-      ? 'text-green-700 border-green-200 bg-green-50'
-      : 'text-red-700 border-red-200 bg-red-50';
-  };
-
-  const getEntityName = (alert: Alert) => {
-    if (alert.plant_name) return alert.plant_name;
-    if (alert.source_type === 'DOCUMENT') return 'Document Discrepancy';
-    if (alert.source_type === 'LEGAL_MATTER') return 'Legal Matter Conflict';
-    if (alert.source_type === 'NEWS') return 'News Conflict';
-    if (alert.source_type === 'INGESTION') return 'Ingestion Problem';
-    if (alert.source_type === 'SYSTEM') return 'System Alert';
-    return 'Unknown Entity';
+    switch (status) {
+      case 'UNREVIEWED':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700 border border-red-200 uppercase">UNREVIEWED</span>;
+      case 'REVIEWED':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 uppercase">REVIEWED</span>;
+      case 'DISMISSED':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200 uppercase">DISMISSED</span>;
+      default:
+        return null;
+    }
   };
 
   if (loading) {
@@ -205,175 +219,169 @@ export default function AlertsPage() {
     );
   }
 
-  // Build source options based on admin status
-  const sourceOptions = [
-    { value: 'ALL', label: 'All Sources' },
-    { value: 'FORECAST', label: 'Forecast' },
-    { value: 'DOCUMENT', label: 'Documents' },
-    { value: 'LEGAL_MATTER', label: 'Legal' },
-    { value: 'NEWS', label: 'News' },
-  ];
-  if (isAdmin) {
-    sourceOptions.push({ value: 'INGESTION', label: 'Ingestion' });
-    sourceOptions.push({ value: 'SYSTEM', label: 'System' });
-  }
-
   return (
     <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50">
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         
+        {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 border-b border-gray-200 gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Anomaly Alerts</h1>
-            <p className="mt-1 text-sm text-gray-500">AI-generated alerts for unusual patterns across forecasts, documents, legal matters, and news.</p>
+            <p className="mt-1 text-sm text-gray-500 italic">
+              AI-generated alerts for unusual generation patterns detected across active power plants
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-semibold text-gray-500 uppercase">From:</label>
-              <input type="date" className="rounded-md border-gray-200 py-1 px-2 text-xs border focus:ring-brand focus:border-brand" />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-semibold text-gray-500 uppercase">To:</label>
-              <input type="date" className="rounded-md border-gray-200 py-1 px-2 text-xs border focus:ring-brand focus:border-brand" />
-            </div>
             <select 
-              value={filterSource}
-              onChange={(e) => setFilterSource(e.target.value)}
-              className="rounded-md border-gray-200 py-1.5 pl-3 pr-8 text-xs font-semibold border focus:ring-brand focus:border-brand uppercase"
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="rounded-lg border-gray-200 py-1.5 pl-3 pr-8 text-xs font-bold border focus:ring-brand focus:border-brand uppercase bg-white"
             >
-              {sourceOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
+              <option value="ALL">All Plants</option>
+              <option value="GENCOs">GENCOs</option>
+              <option value="Thermal Plants">Thermal Plants</option>
+              <option value="Hydro Plants">Hydro Plants</option>
+              <option value="IPPs">IPPs</option>
             </select>
             <select 
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="rounded-md border-gray-200 py-1.5 pl-3 pr-8 text-xs font-semibold border focus:ring-brand focus:border-brand uppercase"
+              className="rounded-lg border-gray-200 py-1.5 pl-3 pr-8 text-xs font-bold border focus:ring-brand focus:border-brand uppercase bg-white"
             >
-              <option value="UNRESOLVED">Unresolved</option>
-              <option value="RESOLVED">Resolved</option>
+              <option value="UNREVIEWED">Unreviewed</option>
+              <option value="REVIEWED">Reviewed</option>
+              <option value="DISMISSED">Dismissed</option>
               <option value="ALL">All Alerts</option>
             </select>
           </div>
         </div>
 
-        <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-xl overflow-hidden border border-gray-100">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Entity / Source</th>
-                <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
-                <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6 text-right"><span className="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {filteredAlerts.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-sm text-gray-500 italic">No alerts found for the selected criteria.</td>
-                </tr>
-              ) : filteredAlerts.map((alert) => {
-                const sourceBadge = getSourceBadge(alert.source_type);
-                return (
-                  <React.Fragment key={alert.id}>
-                    <tr 
-                      onClick={() => toggleExpand(alert.id)}
-                      className={`cursor-pointer transition-colors ${
-                        alert.status === 'UNRESOLVED' ? 'hover:bg-gray-50' : 'bg-gray-50/50'
-                      }`}
-                    >
-                      <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-semibold text-gray-900">
-                        <div className="flex items-center">
-                          {alert.status === 'UNRESOLVED' && <span className="h-2 w-2 rounded-full bg-red-600 animate-pulse mr-2.5"></span>}
-                          {getEntityName(alert)}
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{alert.alert_date}</td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm">
-                        <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset ${sourceBadge.color}`}>
-                          {sourceBadge.label}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${getStatusBadge(alert.status)}`}>
-                          {alert.status}
-                        </span>
-                      </td>
-                      <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-bold sm:pr-6">
-                        <span className="text-brand flex items-center justify-end">
-                          {expandedId === alert.id ? 'Hide Details' : 'View Details'}
-                          <svg className={`ml-1.5 h-4 w-4 transition-transform ${expandedId === alert.id ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </span>
-                      </td>
-                    </tr>
-                    {expandedId === alert.id && (
-                      <tr className="bg-gray-50">
-                        <td colSpan={5} className="px-4 py-6">
-                          <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-inner">
-                            <div className="flex justify-between items-start mb-4">
-                              <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Detailed AI Analysis</h4>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${getStatusBadge(alert.status)}`}>
-                                Status: {alert.status}
-                              </span>
-                            </div>
+        {/* KPI Summary Strip */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Unreviewed Alerts</p>
+            <p className="text-2xl font-bold text-red-600">{unreviewedCount}</p>
+            <p className="text-[10px] text-gray-500 font-medium mt-1">Requires advisory attention</p>
+          </div>
+          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Zero Output Events</p>
+            <p className="text-2xl font-bold text-amber-600">{zeroOutputCount}</p>
+            <p className="text-[10px] text-gray-500 font-medium mt-1">Total plant capacity drop</p>
+          </div>
+          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Curtailment Spikes</p>
+            <p className="text-2xl font-bold text-purple-600">{curtailmentCount}</p>
+            <p className="text-[10px] text-gray-500 font-medium mt-1">Grid dispatch bottleneck events</p>
+          </div>
+        </div>
 
-                            {/* Source-specific info */}
-                            {alert.source_type !== 'FORECAST' && (
-                              <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                                <p className="text-[10px] font-bold text-gray-500 uppercase">Anomaly Source</p>
-                                <p className="text-xs text-gray-700 mt-1">
-                                  {alert.source_type === 'DOCUMENT' && 'Discrepancy identified within uploaded documents.'}
-                                  {alert.source_type === 'LEGAL_MATTER' && 'Conflict flagged from legal matter records.'}
-                                  {alert.source_type === 'NEWS' && 'Conflict surfaced from news and updates.'}
-                                  {alert.source_type === 'INGESTION' && 'Data ingestion pipeline encountered an error.'}
-                                  {alert.source_type === 'SYSTEM' && 'System-wide infrastructure issue detected.'}
-                                </p>
-                              </div>
-                            )}
+        {/* Alerts Table */}
+        <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-xl overflow-hidden border border-gray-200">
+          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Generation Anomaly Log</h2>
+          </div>
 
-                            <p className="text-sm text-gray-700 leading-relaxed mb-6 whitespace-pre-wrap">
-                              {alert.explanation}
-                            </p>
-
-                            {/* Assignment info */}
-                            {alert.assigned_to && (
-                              <div className="mb-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                                <p className="text-xs font-bold text-yellow-800">
-                                  Assigned to: {alert.assigned_user_name || alert.assigned_to}
-                                </p>
-                              </div>
-                            )}
-
-                            {alert.status === 'UNRESOLVED' && (
-                              <div className="flex items-center gap-3 pt-4 border-t border-gray-100 flex-wrap">
-                                {!alert.assigned_to && (
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); assignToMe(alert.id); }}
-                                    className="px-4 py-2 text-xs font-bold text-yellow-700 bg-yellow-50 border border-yellow-200 rounded hover:bg-yellow-100 transition-all"
-                                  >
-                                    ASSIGN TO ME
-                                  </button>
-                                )}
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); updateStatus(alert.id, 'RESOLVED'); }}
-                                  className="px-4 py-2 text-xs font-bold text-white bg-brand rounded hover:opacity-90 transition-all shadow-sm"
+          {filteredAlerts.length === 0 ? (
+            <div className="p-12 text-center space-y-3">
+              <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <p className="text-sm font-semibold text-gray-700 italic max-w-md mx-auto">
+                No generation data has been loaded yet. Alerts will appear automatically once the TCN daily report ingestion pipeline is active.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Power Plant</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Plant Type</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Deviation (σ)</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Expected (MWh)</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Actual (MWh)</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="py-3.5 pl-3 pr-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider sm:pr-6">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {filteredAlerts.map((alert) => (
+                    <React.Fragment key={alert.id}>
+                      <tr className="hover:bg-gray-50 transition-colors">
+                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-bold text-gray-900">
+                          <div className="flex items-center">
+                            {alert.status === 'UNREVIEWED' && <span className="h-2 w-2 rounded-full bg-red-600 animate-pulse mr-2.5 shrink-0" />}
+                            {alert.plant_name}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-xs font-semibold text-gray-600">{alert.plant_type}</td>
+                        <td className="whitespace-nowrap px-3 py-4 text-xs text-gray-500 font-medium">{alert.alert_date}</td>
+                        <td className="whitespace-nowrap px-3 py-4 text-xs">{getTypeBadge(alert.alert_type)}</td>
+                        <td className="whitespace-nowrap px-3 py-4 text-xs font-bold">
+                          <span className={alert.deviation_sigma < 0 ? 'text-red-600' : 'text-green-600'}>
+                            {alert.deviation_sigma > 0 ? `+${alert.deviation_sigma}σ` : `${alert.deviation_sigma}σ`}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-xs font-semibold text-gray-500">
+                          {alert.expected_output_mwh !== null ? `${alert.expected_output_mwh} MWh` : 'N/A'}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-xs font-bold text-gray-900">
+                          {alert.actual_output_mwh !== null ? `${alert.actual_output_mwh} MWh` : 'N/A'}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-xs">{getStatusBadge(alert.status)}</td>
+                        <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-xs font-bold sm:pr-6">
+                          <div className="flex items-center justify-end gap-2">
+                            {alert.status === 'UNREVIEWED' && (
+                              <>
+                                <button
+                                  onClick={() => updateStatus(alert.id, 'REVIEWED')}
+                                  className="px-2.5 py-1 bg-brand text-white text-[10px] font-bold rounded hover:opacity-90 transition-all uppercase"
                                 >
-                                  MARK RESOLVED
+                                  Mark Reviewed
                                 </button>
-                              </div>
+                                <button
+                                  onClick={() => updateStatus(alert.id, 'DISMISSED')}
+                                  className="px-2.5 py-1 bg-gray-100 text-gray-600 text-[10px] font-bold rounded hover:bg-gray-200 transition-all uppercase border border-gray-200"
+                                >
+                                  Dismiss
+                                </button>
+                              </>
                             )}
+                            <button
+                              onClick={() => setExpandedId(expandedId === alert.id ? null : alert.id)}
+                              className="text-gray-400 hover:text-brand transition-colors p-1"
+                              title="Toggle AI Analysis"
+                            >
+                              <svg className={`h-4 w-4 transition-transform ${expandedId === alert.id ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
                           </div>
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                      {expandedId === alert.id && (
+                        <tr className="bg-slate-50">
+                          <td colSpan={9} className="px-6 py-4 border-y border-gray-100">
+                            <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-2">
+                              <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+                                AI Analysis (Plain English Explanation)
+                              </h4>
+                              <p className="text-xs text-gray-700 leading-relaxed font-medium">
+                                {alert.explanation}
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </main>

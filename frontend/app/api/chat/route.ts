@@ -78,6 +78,59 @@ async function getGeneralTimeSeriesData(args: { table_name: string; start_date: 
   }
   return { data };
 }
+async function searchUploadedDocuments(args: { query: string; limit?: number }) {
+  try {
+    const limit = args.limit || 4;
+    const cleanQuery = (args.query || '').trim();
+    if (!cleanQuery) return { status: 'empty', message: 'Query string empty.' };
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // 1. Token-efficient keyword RAG search against extracted text chunks
+    const { data: chunks, error: chunkErr } = await supabase
+      .from('embeddings')
+      .select('chunk_index, chunk_text, metadata, document_id, documents(id, title, document_type, classification)')
+      .ilike('chunk_text', `%${cleanQuery}%`)
+      .limit(limit);
+
+    if (!chunkErr && chunks && chunks.length > 0) {
+      return {
+        status: 'success',
+        found_count: chunks.length,
+        chunks: chunks.map(c => ({
+          document_title: (c.documents as any)?.title || 'Document Excerpt',
+          document_type: (c.documents as any)?.document_type,
+          slide_number: c.metadata?.slide_number || null,
+          sheet_name: c.metadata?.sheet_name || null,
+          excerpt: c.chunk_text.slice(0, 600), // Strict token cap (~100 words per chunk max!)
+        }))
+      };
+    }
+
+    // 2. Fallback: Search document titles or notes metadata
+    const { data: docs } = await supabase
+      .from('documents')
+      .select('id, title, document_type, classification, summary, notes')
+      .or(`title.ilike.%${cleanQuery}%,notes.ilike.%${cleanQuery}%`)
+      .limit(limit);
+
+    if (docs && docs.length > 0) {
+      return {
+        status: 'success',
+        found_count: docs.length,
+        documents: docs.map(d => ({
+          title: d.title,
+          type: d.document_type,
+          summary: d.summary || d.notes || 'Document recorded in database repository.',
+        }))
+      };
+    }
+
+    return { status: 'empty', message: `No matching document chunks found for query "${cleanQuery}".` };
+  } catch (err: any) {
+    return { error: `Document search error: ${err.message}` };
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -323,6 +376,20 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
               },
               required: ["table_name", "start_date"]
             }
+          },
+          {
+            name: "search_uploaded_documents",
+            description: "Search and crawl uploaded document repository (.pdf, .docx, .pptx, .xlsx) for relevant text chunks, slide contents, regulatory orders, court judgments, policy papers, or summaries matching a specific query.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                query: {
+                  type: "STRING",
+                  description: "The search query or keywords to look for in uploaded documents (e.g. 'African School of Regulation', 'Tariff Order', 'Lagos Business School')."
+                }
+              },
+              required: ["query"]
+            }
           }
         ]
       }
@@ -383,6 +450,8 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
             result = await getGenerationData(call.args as any);
           } else if (call.name === 'get_general_time_series_data') {
             result = await getGeneralTimeSeriesData(call.args as any);
+          } else if (call.name === 'search_uploaded_documents') {
+            result = await searchUploadedDocuments(call.args as any);
           } else {
             result = { error: `Tool ${call.name} not found.` };
           }

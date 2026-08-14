@@ -1,63 +1,83 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface HistoryItem {
-  id: number;
+  id: string | number;
   query: string;
   timestamp: string;
   sessionLength: number;
   messages: { role: 'user' | 'assistant'; content: string }[];
 }
 
+const defaultHistory: HistoryItem[] = [
+  {
+    id: 1,
+    query: 'What was the total generation output last week?',
+    timestamp: '2026-05-16 10:42 AM',
+    sessionLength: 4,
+    messages: [
+      { role: 'user', content: 'What was the total generation output last week?' },
+      { role: 'assistant', content: 'The total generation output for the week of May 10-16, 2026 was approximately **4,287 MWh** across all tracked power plants. This represents a **3.2% increase** compared to the previous week.\n\n### Top Contributors:\n- **Egbin Thermal**: 1,120 MWh\n- **Azura-Edo IPP**: 890 MWh\n- **Shiroro Hydro**: 740 MWh' },
+      { role: 'user', content: 'How does this compare to the monthly average?' },
+      { role: 'assistant', content: 'The weekly output of 4,287 MWh is **7% above** the monthly average of 4,007 MWh for May 2026. This is largely driven by improved gas supply at the Escravos-Lagos Pipeline System (ELPS) and seasonal hydro improvements at Shiroro and Kainji.' },
+    ],
+  },
+  {
+    id: 2,
+    query: 'Show me all NERC enforcement actions from the last six months',
+    timestamp: '2026-05-15 04:15 PM',
+    sessionLength: 12,
+    messages: [
+      { role: 'user', content: 'Show me all NERC enforcement actions from the last six months' },
+      { role: 'assistant', content: 'I found **8 enforcement actions** issued by NERC between November 2025 and May 2026:\n\n1. **Warning to Benin DISCO** — Service quality failures (Dec 2025)\n2. **Fine of ₦500M to Enugu DISCO** — Metering compliance (Jan 2026)\n3. **License suspension threat to PHED** — Outstanding market settlement (Feb 2026)\n4. **Notice to Kaduna DISCO** — Customer complaint resolution (Mar 2026)' },
+    ],
+  },
+  {
+    id: 3,
+    query: 'Explain the impact of the new tariff order on industrial consumers',
+    timestamp: '2026-05-14 09:30 AM',
+    sessionLength: 8,
+    messages: [
+      { role: 'user', content: 'Explain the impact of the new tariff order on industrial consumers' },
+      { role: 'assistant', content: 'The NERC Multi-Year Tariff Order (MYTO) 2024, effective July 2026, introduces significant changes for industrial consumers classified under **Band A and Band B**:\n\n### Key Changes:\n- **Band A industrial tariff** increases by 12.3% to ₦225/kWh\n- **Minimum availability guarantee** of 20 hours/day for Band A\n- **Cost-reflective pricing** now includes a carbon adjustment surcharge\n\n### Impact Assessment:\nIndustrial consumers in the Band A category should expect an average monthly increase of approximately **₦1.8M** for mid-sized manufacturing facilities.' },
+    ],
+  },
+];
+
 export default function HistoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedConversation, setSelectedConversation] = useState<HistoryItem | null>(null);
-  
-  const history: HistoryItem[] = [
-    {
-      id: 1,
-      query: 'What was the total generation output last week?',
-      timestamp: '2026-05-16 10:42 AM',
-      sessionLength: 4,
-      messages: [
-        { role: 'user', content: 'What was the total generation output last week?' },
-        { role: 'assistant', content: 'The total generation output for the week of May 10-16, 2026 was approximately **4,287 MWh** across all tracked power plants. This represents a **3.2% increase** compared to the previous week.\n\n### Top Contributors:\n- **Egbin Thermal**: 1,120 MWh\n- **Azura-Edo IPP**: 890 MWh\n- **Shiroro Hydro**: 740 MWh' },
-        { role: 'user', content: 'How does this compare to the monthly average?' },
-        { role: 'assistant', content: 'The weekly output of 4,287 MWh is **7% above** the monthly average of 4,007 MWh for May 2026. This is largely driven by improved gas supply at the Escravos-Lagos Pipeline System (ELPS) and seasonal hydro improvements at Shiroro and Kainji.' },
-      ],
-    },
-    {
-      id: 2,
-      query: 'Show me all NERC enforcement actions from the last six months',
-      timestamp: '2026-05-15 04:15 PM',
-      sessionLength: 12,
-      messages: [
-        { role: 'user', content: 'Show me all NERC enforcement actions from the last six months' },
-        { role: 'assistant', content: 'I found **8 enforcement actions** issued by NERC between November 2025 and May 2026:\n\n1. **Warning to Benin DISCO** — Service quality failures (Dec 2025)\n2. **Fine of ₦500M to Enugu DISCO** — Metering compliance (Jan 2026)\n3. **License suspension threat to PHED** — Outstanding market settlement (Feb 2026)\n4. **Notice to Kaduna DISCO** — Customer complaint resolution (Mar 2026)' },
-      ],
-    },
-    {
-      id: 3,
-      query: 'Explain the impact of the new tariff order on industrial consumers',
-      timestamp: '2026-05-14 09:30 AM',
-      sessionLength: 8,
-      messages: [
-        { role: 'user', content: 'Explain the impact of the new tariff order on industrial consumers' },
-        { role: 'assistant', content: 'The NERC Multi-Year Tariff Order (MYTO) 2024, effective July 2026, introduces significant changes for industrial consumers classified under **Band A and Band B**:\n\n### Key Changes:\n- **Band A industrial tariff** increases by 12.3% to ₦225/kWh\n- **Minimum availability guarantee** of 20 hours/day for Band A\n- **Cost-reflective pricing** now includes a carbon adjustment surcharge\n\n### Impact Assessment:\nIndustrial consumers in the Band A category should expect an average monthly increase of approximately **₦1.8M** for mid-sized manufacturing facilities.' },
-      ],
-    },
-    {
-      id: 4,
-      query: 'Compare gas pressure at ELPS vs output at Egbin Thermal',
-      timestamp: '2026-05-12 11:20 AM',
-      sessionLength: 6,
-      messages: [
-        { role: 'user', content: 'Compare gas pressure at ELPS vs output at Egbin Thermal' },
-        { role: 'assistant', content: 'There is a strong correlation between ELPS gas pressure and Egbin Thermal output:\n\n- When ELPS pressure dropped below **800 psi** on May 8-9, Egbin output fell to **120 MWh** (vs expected 300 MWh)\n- Normal ELPS pressure (~1,050 psi) correlates with Egbin outputs of **280-320 MWh**\n\nThis suggests Egbin\'s current output capacity is approximately **95% dependent** on consistent ELPS gas supply.' },
-      ],
-    },
-  ];
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('epdh_chat_sessions') || '[]');
+      if (Array.isArray(saved) && saved.length > 0) {
+        setHistory([...saved, ...defaultHistory]);
+      } else {
+        setHistory(defaultHistory);
+      }
+    } catch (e) {
+      setHistory(defaultHistory);
+    }
+  }, []);
+
+  const handleDeleteSession = (id: string | number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = history.filter(item => item.id !== id);
+    setHistory(updated);
+    if (selectedConversation?.id === id) {
+      setSelectedConversation(null);
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem('epdh_chat_sessions') || '[]');
+      const filtered = saved.filter((s: any) => String(s.id) !== String(id));
+      localStorage.setItem('epdh_chat_sessions', JSON.stringify(filtered));
+    } catch (err) {
+      // ignore
+    }
+  };
 
   const filteredHistory = history.filter(item => 
     item.query.toLowerCase().includes(searchTerm.toLowerCase())
@@ -70,7 +90,7 @@ export default function HistoryPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 border-b border-gray-200 gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Conversation History</h1>
-            <p className="mt-1 text-sm text-gray-500">Access and review your previous AI interactions.</p>
+            <p className="mt-1 text-sm text-gray-500">Access, review, and search your saved AI conversation sessions.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
             <div className="relative flex-1 sm:flex-none">
@@ -86,12 +106,9 @@ export default function HistoryPage() {
               </svg>
             </div>
             <select className="rounded-lg border-gray-200 py-2 pl-3 pr-8 text-[10px] font-bold border focus:ring-brand uppercase tracking-wider">
-              <option>Last 7 Days</option>
-              <option>Last 14 Days</option>
-              <option>Last 30 Days</option>
-              <option>Last 90 Days</option>
-              <option>This Year</option>
               <option>All Time</option>
+              <option>Last 7 Days</option>
+              <option>Last 30 Days</option>
             </select>
           </div>
         </div>
@@ -127,15 +144,17 @@ export default function HistoryPage() {
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="flex flex-col items-end gap-1">
+                        <div className="flex flex-col items-end gap-1.5">
                           <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600">
                             {item.sessionLength} MESSAGES
                           </span>
-                          <svg className={`h-4 w-4 transition-colors ${
-                            selectedConversation?.id === item.id ? 'text-brand' : 'text-gray-300 group-hover:text-brand'
-                          }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
+                          <button
+                            onClick={(e) => handleDeleteSession(item.id, e)}
+                            className="text-[10px] font-bold text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Delete session"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
                     </div>

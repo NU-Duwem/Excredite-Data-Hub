@@ -71,9 +71,30 @@ export default function QueryPage() {
   const responseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const [messages, setMessages] = useState([initialMessage]);
+  const [sessionId, setSessionId] = useState<string>(() => `session_${Date.now()}`);
   const [showDocDropdown, setShowDocDropdown] = useState(false);
   const [docNotification, setDocNotification] = useState<{ title: string; section: string; tab: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Automatically persist live conversation history to localStorage
+  useEffect(() => {
+    if (messages.length <= 1) return;
+    try {
+      const existing = JSON.parse(localStorage.getItem('epdh_chat_sessions') || '[]');
+      const userQuery = messages.find(m => m.role === 'user')?.content || 'AI Query Session';
+      const currentSession = {
+        id: sessionId,
+        query: userQuery,
+        timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+        sessionLength: messages.length,
+        messages: messages.map(m => ({ role: m.role, content: m.content }))
+      };
+      const updated = [currentSession, ...existing.filter((s: any) => String(s.id) !== String(sessionId))];
+      localStorage.setItem('epdh_chat_sessions', JSON.stringify(updated));
+    } catch (err) {
+      console.error('Error saving chat history session:', err);
+    }
+  }, [messages, sessionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -140,6 +161,10 @@ export default function QueryPage() {
     }
   };
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isSubmitting, docNotification]);
+
   const handleNewConversation = () => {
     if (responseTimeoutRef.current) {
       clearTimeout(responseTimeoutRef.current);
@@ -148,6 +173,7 @@ export default function QueryPage() {
 
     setQuery('');
     setIsSubmitting(false);
+    setSessionId(`session_${Date.now()}`);
     setMessages([{ ...initialMessage }]);
     setDocNotification(null);
   };
@@ -248,7 +274,7 @@ export default function QueryPage() {
             </Link>
           </div>
 
-          <div className="flex-1 flex flex-col space-y-6 pb-24">
+          <div className="flex-1 flex flex-col space-y-6 pb-44">
             {messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] rounded-lg px-5 py-4 ${

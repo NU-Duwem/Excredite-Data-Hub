@@ -48,6 +48,74 @@ const DATE_PRESETS = [
   { label: '30 days', days: 30 },
   { label: 'Custom', days: -1 },
 ];
+function NativeDocxViewer({ url }: { url: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadDocx = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to download Word document file');
+        const blob = await res.blob();
+        
+        if (containerRef.current && isMounted) {
+          containerRef.current.innerHTML = '';
+          const { renderAsync } = await import('docx-preview');
+          await renderAsync(blob, containerRef.current, undefined, {
+            inWrapper: true,
+            ignoreWidth: true,
+            ignoreHeight: true,
+            breakPages: true,
+            experimental: true,
+          });
+        }
+      } catch (err: any) {
+        if (isMounted) setError(err.message || 'Error rendering Word preview');
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    loadDocx();
+    return () => { isMounted = false; };
+  }, [url]);
+
+  return (
+    <div className="w-full h-[560px] overflow-y-auto bg-gray-100 p-4 rounded-xl shadow-inner border border-gray-200">
+      {loading && (
+        <div className="py-16 text-center text-xs text-gray-500 font-semibold animate-pulse">
+          Rendering native Word document...
+        </div>
+      )}
+      {error && (
+        <div className="py-12 text-center text-xs text-red-500 font-medium bg-white p-6 rounded-xl max-w-lg mx-auto shadow-md">
+          Notice: {error}. You can download the original file above.
+        </div>
+      )}
+      <div ref={containerRef} className="docx-render-canvas max-w-4xl mx-auto shadow-xl bg-white rounded-lg p-2" />
+    </div>
+  );
+}
+
+// Native Microsoft Office Web Embed Engine Component for PPTX, XLSX, DOCX
+function NativeOfficeViewer({ docUrl, title }: { docUrl: string; title: string }) {
+  const msViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(docUrl)}`;
+
+  return (
+    <div className="w-full h-[560px] bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200">
+      <iframe
+        src={msViewerUrl}
+        className="w-full h-full border-0 rounded-xl"
+        title={title}
+        allowFullScreen
+      />
+    </div>
+  );
+}
 
 function DocumentsContent() {
   const searchParams = useSearchParams();
@@ -75,8 +143,9 @@ function DocumentsContent() {
   const [classification, setClassification] = useState('PUBLIC');
   const [uploadTitle, setUploadTitle] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadProgress, setUploadProgress] = useState<'idle' | 'uploading' | 'success' | 'error' | 'duplicate'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
+  const [duplicateDocMatch, setDuplicateDocMatch] = useState<Document | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -112,7 +181,148 @@ function DocumentsContent() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
 
+  // Selected document viewer state
+  const [docFileUrl, setDocFileUrl] = useState<string | null>(null);
+  const [docChunks, setDocChunks] = useState<any[]>([]);
+  const [chunksLoading, setChunksLoading] = useState(false);
+  const [viewerTab, setViewerTab] = useState<'preview' | 'chunks'>('preview');
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [docToDelete, setDocToDelete] = useState<Document | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteModalLoading, setDeleteModalLoading] = useState(false);
+
+  // Bulk selection state
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+
   const supabase = createClient();
+
+  // Toggle single document selection checkbox
+  const toggleSelectDoc = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSelectedDocIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  // Toggle select all filtered documents
+  const toggleSelectAll = () => {
+    if (selectedDocIds.length === filteredDocs.length && filteredDocs.length > 0) {
+      setSelectedDocIds([]);
+    } else {
+      setSelectedDocIds(filteredDocs.map(d => d.id));
+    }
+  };
+
+  // Delete single document handler via Modal
+  const getAuthHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+    return headers;
+  };
+
+  const openDeleteModal = (e: React.MouseEvent, doc: Document) => {
+    e.stopPropagation();
+    setDocToDelete(doc);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteDoc = async () => {
+    if (!docToDelete) return;
+
+    setDeleteModalLoading(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/documents/${docToDelete.id}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      });
+      const resJson = await res.json();
+      if (res.ok) {
+        setDocuments(prev => prev.filter(d => d.id !== docToDelete.id));
+        setSelectedDocIds(prev => prev.filter(id => id !== docToDelete.id));
+        if (selectedDoc?.id === docToDelete.id) {
+          setSelectedDoc(null);
+        }
+        setShowDeleteModal(false);
+        setDocToDelete(null);
+      } else {
+        alert(resJson.error || 'Failed to delete document');
+      }
+    } catch (err: any) {
+      alert(`Delete error: ${err.message}`);
+    } finally {
+      setDeleteModalLoading(false);
+    }
+  };
+
+  // Bulk Delete Handler
+  const confirmBulkDeleteDocs = async () => {
+    if (selectedDocIds.length === 0) return;
+
+    setBulkDeleteLoading(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/documents/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ documentIds: selectedDocIds }),
+      });
+      const resJson = await res.json();
+      if (res.ok) {
+        setDocuments(prev => prev.filter(d => !selectedDocIds.includes(d.id)));
+        if (selectedDoc && selectedDocIds.includes(selectedDoc.id)) {
+          setSelectedDoc(null);
+        }
+        setSelectedDocIds([]);
+        setShowBulkDeleteModal(false);
+      } else {
+        alert(resJson.error || 'Failed to bulk delete documents');
+      }
+    } catch (err: any) {
+      alert(`Bulk delete error: ${err.message}`);
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
+  // Fetch document signed URL and extracted text chunks whenever selectedDoc changes
+  useEffect(() => {
+    if (selectedDoc?.s3_key) {
+      const fetchSignedUrlAndChunks = async () => {
+        // 1. Get signed URL for private bucket compatibility
+        const { data: signedData } = await supabase.storage
+          .from('documents')
+          .createSignedUrl(selectedDoc.s3_key!, 3600);
+
+        if (signedData?.signedUrl) {
+          setDocFileUrl(signedData.signedUrl);
+        } else {
+          const { data: pubData } = supabase.storage.from('documents').getPublicUrl(selectedDoc.s3_key!);
+          setDocFileUrl(pubData.publicUrl);
+        }
+
+        // 2. Fetch extracted chunks
+        setChunksLoading(true);
+        const { data: chunks } = await supabase
+          .from('embeddings')
+          .select('chunk_index, chunk_text, metadata')
+          .eq('document_id', selectedDoc.id)
+          .order('chunk_index', { ascending: true });
+        
+        setDocChunks(chunks || []);
+        setChunksLoading(false);
+      };
+      fetchSignedUrlAndChunks();
+    } else {
+      setDocFileUrl(null);
+      setDocChunks([]);
+    }
+  }, [selectedDoc, supabase]);
 
   // Get user role
   useEffect(() => {
@@ -125,9 +335,50 @@ function DocumentsContent() {
     fetchUserRole();
   }, [supabase]);
 
+  // Poll for status updates whenever documents are in PENDING or PROCESSING status
+  useEffect(() => {
+    const hasPending = documents.some(d => d.processing_status === 'PENDING' || d.processing_status === 'PROCESSING');
+    if (!hasPending) return;
+
+    const interval = setInterval(async () => {
+      const { data: updatedDocs } = await supabase
+        .from('documents')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (updatedDocs && updatedDocs.length > 0) {
+        setDocuments(updatedDocs);
+        if (selectedDoc) {
+          const fresh = updatedDocs.find(d => d.id === selectedDoc.id);
+          if (fresh) setSelectedDoc(fresh);
+        }
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [documents, selectedDoc, supabase]);
+
   const isAdmin = userRole === 'power_admin' || userRole === 'admin';
 
-  // Fetch documents
+  // Helper to trigger manual or background processing of a pending document
+  const handleProcessDoc = async (docId: string) => {
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/documents/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ documentId: docId }),
+      });
+      const resJson = await res.json();
+      if (res.ok && resJson.document) {
+        setDocuments(prev => prev.map(d => d.id === docId ? { ...d, ...resJson.document } : d));
+      }
+    } catch (err) {
+      console.warn('Process document background check:', err);
+    }
+  };
+
+  // Fetch documents and auto-process PENDING ones
   useEffect(() => {
     const fetchDocs = async () => {
       setDocsLoading(true);
@@ -138,6 +389,12 @@ function DocumentsContent() {
       
       if (!error && data) {
         setDocuments(data);
+
+        // Trigger background processing once for stuck PENDING documents
+        const pendingDocs = data.filter((d: any) => d.processing_status === 'PENDING');
+        pendingDocs.forEach((d: any) => {
+          handleProcessDoc(d.id);
+        });
       }
       setDocsLoading(false);
     };
@@ -196,7 +453,7 @@ function DocumentsContent() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  // File selection handler
+  // File selection handler with Instant Client-Side Duplicate Detection
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -214,50 +471,123 @@ function DocumentsContent() {
     }
 
     setSelectedFile(file);
-    if (!uploadTitle) setUploadTitle(file.name.replace(/\.[^/.]+$/, ''));
-    setUploadProgress('idle');
-    setUploadMessage('');
+    const cleanedTitle = file.name.replace(/\.[^/.]+$/, '');
+    if (!uploadTitle) setUploadTitle(cleanedTitle);
+
+    // Instant check if document with matching size or title already exists in repository
+    const matchedDoc = documents.find(d => 
+      (d.file_size_bytes && d.file_size_bytes === file.size) ||
+      d.title.trim().toLowerCase() === cleanedTitle.trim().toLowerCase()
+    );
+
+    if (matchedDoc) {
+      setDuplicateDocMatch(matchedDoc);
+      setUploadProgress('duplicate');
+      setUploadMessage(`Duplicate Warning: A document titled "${matchedDoc.title}" matching this file size (${formatFileSize(file.size)}) already exists in the repository.`);
+    } else {
+      setDuplicateDocMatch(null);
+      setUploadProgress('idle');
+      setUploadMessage('');
+    }
   };
 
   const handleDeselectFile = () => {
     setSelectedFile(null);
     setFilePreviewUrl(null);
+    setDuplicateDocMatch(null);
+    setUploadProgress('idle');
+    setUploadMessage('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Upload handler
+  // Upload handler with direct browser storage upload pipeline for large files
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile || !uploadTitle) return;
 
     setUploadProgress('uploading');
-    setUploadMessage('Uploading document...');
+    setUploadMessage('Preparing upload...');
 
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('title', uploadTitle);
-      formData.append('documentType', docType);
-      formData.append('customType', customType);
-      formData.append('classification', classification);
-      if (keywords) formData.append('keywords', keywords);
-      if (selectedMatter) formData.append('linkedMatterId', selectedMatter.id);
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id || 'anonymous';
+      const authHeaders = await getAuthHeaders();
 
-      const response = await fetch('/api/documents/upload', {
-        method: 'POST',
-        body: formData,
-      });
+      // Compute SHA-256 content hash in browser
+      let fileHash = '';
+      try {
+        const buffer = await selectedFile.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      } catch (hErr) {
+        console.warn('Browser SHA-256 hash calculation skipped:', hErr);
+      }
+
+      // Direct Browser Upload to Supabase Storage (bypasses Next.js dev server body limits)
+      const fileExt = selectedFile.name.split('.').pop() || 'bin';
+      const storagePath = `${userId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
+
+      setUploadMessage(`Uploading file (${formatFileSize(selectedFile.size)})...`);
+
+      const { error: storageError } = await supabase
+        .storage
+        .from('documents')
+        .upload(storagePath, selectedFile, { upsert: false });
+
+      let response;
+      if (!storageError) {
+        // Direct storage upload succeeded -> Send lightweight JSON payload to backend
+        setUploadMessage('Registering document metadata...');
+        response = await fetch('/api/documents/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({
+            s3_key: storagePath,
+            title: uploadTitle,
+            documentType: docType,
+            customType,
+            classification,
+            keywords: keywords || null,
+            linkedMatterId: selectedMatter?.id || null,
+            fileSize: selectedFile.size,
+            fileHash,
+          }),
+        });
+      } else {
+        console.warn('Direct storage upload fallback to FormData endpoint:', storageError);
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('title', uploadTitle);
+        formData.append('documentType', docType);
+        formData.append('customType', customType);
+        formData.append('classification', classification);
+        if (keywords) formData.append('keywords', keywords);
+        if (selectedMatter) formData.append('linkedMatterId', selectedMatter.id);
+
+        response = await fetch('/api/documents/upload', {
+          method: 'POST',
+          headers: authHeaders,
+          body: formData,
+        });
+      }
 
       const result = await response.json();
 
       if (!response.ok || result.error) {
-        setUploadProgress('error');
-        setUploadMessage(result.error || 'Upload failed. Please try again.');
+        if (response.status === 409 || (result.error && result.error.toLowerCase().includes('duplicate'))) {
+          setUploadProgress('duplicate');
+          setUploadMessage(result.error);
+        } else {
+          setUploadProgress('error');
+          setUploadMessage(result.error || 'Upload failed. Please try again.');
+        }
       } else {
         setUploadProgress('success');
-        setUploadMessage(`"${uploadTitle}" uploaded successfully!`);
+        setUploadMessage(`"${uploadTitle}" uploaded successfully! Processing in background...`);
         if (result.document) {
-          setDocuments(prev => [result.document, ...prev]);
+          setDocuments(prev => [result.document, ...prev.filter(d => d.id !== result.document.id)]);
+          setSelectedDoc(result.document);
         }
         setTimeout(() => {
           setSelectedFile(null);
@@ -268,11 +598,12 @@ function DocumentsContent() {
           setKeywords('');
           setLinkToMatter(false);
           setSelectedMatter(null);
+          setDuplicateDocMatch(null);
           setUploadProgress('idle');
           setUploadMessage('');
           setFilePreviewUrl(null);
           if (fileInputRef.current) fileInputRef.current.value = '';
-        }, 3000);
+        }, 2000);
       }
     } catch (err: any) {
       setUploadProgress('error');
@@ -286,25 +617,47 @@ function DocumentsContent() {
     setAiResponse('');
 
     try {
-      const response = await fetch('/api/documents/edit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: isEditing ? 'edit' : 'ask',
-          documentId: selectedDoc.id,
-          prompt: aiPrompt,
-          currentContent: editContent || selectedDoc.notes || '',
-        }),
-      });
+      if (isEditing) {
+        const response = await fetch('/api/documents/edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'edit',
+            documentId: selectedDoc.id,
+            prompt: aiPrompt,
+            currentContent: editContent || selectedDoc.notes || '',
+          }),
+        });
 
-      const result = await response.json();
-      if (response.ok && result.result) {
-        if (isEditing && result.updatedContent) {
-          setEditContent(result.updatedContent);
+        const result = await response.json();
+        if (response.ok && result.result) {
+          if (result.updatedContent) setEditContent(result.updatedContent);
+          setAiResponse(result.result);
+        } else {
+          setAiResponse(result.error || 'Unable to process edit request.');
         }
-        setAiResponse(result.result);
       } else {
-        setAiResponse(result.error || 'Unable to process request.');
+        // Document Q&A Retrieval-Augmented Generation
+        const response = await fetch(`/api/documents/${selectedDoc.id}/query`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: aiPrompt,
+          }),
+        });
+
+        const result = await response.json();
+        if (response.ok && result.answer) {
+          let output = result.answer;
+          if (result.citations && result.citations.length > 0) {
+            output += '\n\n**Citations & Sources:**\n' + result.citations.map((c: any) => 
+              `- ${c.page_number ? `Page ${c.page_number}` : c.slide_number ? `Slide ${c.slide_number}` : 'Section'}: "${c.snippet}"`
+            ).join('\n');
+          }
+          setAiResponse(output);
+        } else {
+          setAiResponse(result.error || 'Unable to analyze document.');
+        }
       }
     } catch (err: any) {
       setAiResponse(`Error: ${err.message || 'Failed to reach AI service'}`);
@@ -710,9 +1063,59 @@ function DocumentsContent() {
                   )}
                 </div>
 
+                {/* Interactive Duplicate Alert Banner */}
+                {(uploadProgress === 'duplicate' || duplicateDocMatch || (uploadProgress === 'error' && uploadMessage.toLowerCase().includes('duplicate'))) && (
+                  <div className="mt-4 p-4 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-3 animate-in fade-in duration-200">
+                    <div className="flex items-start space-x-3">
+                      <div className="h-8 w-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 font-bold text-sm">
+                        ⚠️
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wide">Duplicate File Alert</h4>
+                        <p className="text-xs text-amber-800 mt-1 leading-relaxed font-medium">
+                          {uploadMessage || `A document matching this file content or size ("${duplicateDocMatch?.title}") already exists in the repository.`}
+                        </p>
+                      </div>
+                    </div>
+                    {duplicateDocMatch && (
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200/60">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('view-document');
+                            setSelectedDoc(duplicateDocMatch);
+                          }}
+                          className="px-3 py-1.5 bg-amber-800 text-white text-[10px] font-bold rounded-lg hover:bg-amber-900 uppercase tracking-wider transition-colors shadow-sm"
+                        >
+                          View Existing Document
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Standard Status Banners */}
+                {uploadProgress === 'error' && !uploadMessage.toLowerCase().includes('duplicate') && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-semibold text-red-700">
+                    {uploadMessage}
+                  </div>
+                )}
+                {uploadProgress === 'success' && (
+                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-xs font-semibold text-green-700 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    {uploadMessage}
+                  </div>
+                )}
+                {uploadProgress === 'uploading' && (
+                  <div className="mt-4 p-3 bg-brand/5 border border-brand/20 rounded-lg text-xs font-semibold text-brand flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-brand" />
+                    {uploadMessage}
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  disabled={!selectedFile || !uploadTitle || uploadProgress === 'uploading'}
+                  disabled={!selectedFile || !uploadTitle || uploadProgress === 'uploading' || uploadProgress === 'duplicate'}
                   className="mt-5 w-full bg-brand text-white rounded-md py-2.5 text-xs font-bold hover:opacity-90 shadow-sm transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Upload Document
@@ -729,14 +1132,23 @@ function DocumentsContent() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-5 space-y-6">
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[400px]">
-                <div className="px-4 py-4 border-b border-gray-200 flex flex-col gap-3 bg-gray-50">
+                <div className="p-5 border-b border-gray-100 flex flex-col gap-3.5 bg-gray-50/80">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Document Repository</h2>
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        checked={selectedDocIds.length > 0 && selectedDocIds.length === filteredDocs.length}
+                        onChange={toggleSelectAll}
+                        className="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand accent-brand cursor-pointer"
+                        title="Select All"
+                      />
+                      <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">Document Repository</h2>
+                    </label>
                     {isAdmin && (
                       <select 
                         value={filterClass}
                         onChange={(e) => setFilterClass(e.target.value)}
-                        className="text-[10px] font-bold border-gray-200 rounded py-1 pl-2 pr-6 border focus:ring-brand"
+                        className="text-xs font-semibold border-gray-200 rounded-lg py-1 pl-2.5 pr-7 border focus:ring-brand focus:border-brand bg-white shadow-sm"
                       >
                         <option value="All">All Classes</option>
                         <option value="PUBLIC">Public</option>
@@ -746,50 +1158,97 @@ function DocumentsContent() {
                   </div>
                   <input
                     type="text"
-                    placeholder="Search by title or type..."
+                    placeholder="Search by title or document type..."
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
-                    className="rounded-md border-gray-200 py-1.5 px-3 text-xs border focus:ring-brand focus:border-brand w-full"
+                    className="rounded-lg border-gray-200 py-2 px-3 text-xs border focus:ring-brand focus:border-brand w-full bg-white shadow-sm font-medium"
                   />
+                  {/* Bulk Action Toolbar */}
+                  {selectedDocIds.length > 0 && (
+                    <div className="flex items-center justify-between bg-red-50 border border-red-200/80 p-3 rounded-xl text-xs animate-in fade-in duration-150">
+                      <span className="font-bold text-red-800 text-xs">
+                        {selectedDocIds.length} document{selectedDocIds.length > 1 ? 's' : ''} selected
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedDocIds([])}
+                          className="px-2.5 py-1 text-[11px] font-bold text-gray-600 hover:text-gray-900 uppercase tracking-wider"
+                        >
+                          Clear
+                        </button>
+                        <button
+                          onClick={() => setShowBulkDeleteModal(true)}
+                          className="px-3.5 py-1.5 bg-red-600 text-white text-[11px] font-bold rounded-lg hover:bg-red-700 transition-colors uppercase tracking-wider shadow-sm flex items-center gap-1.5"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete Selected ({selectedDocIds.length})
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <ul role="list" className="divide-y divide-gray-200 flex-1 overflow-y-auto">
+                <ul role="list" className="divide-y divide-gray-100 flex-1 overflow-y-auto">
                   {docsLoading ? (
-                    <li className="p-8 text-center">
+                    <li className="p-10 text-center">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand mx-auto"></div>
                     </li>
                   ) : filteredDocs.length === 0 ? (
-                    <li className="p-8 text-center text-xs text-gray-500">No documents found.</li>
+                    <li className="p-10 text-center text-xs text-gray-500 font-medium">No documents found.</li>
                   ) : (
                     filteredDocs.map((doc) => (
                       <li 
                         key={doc.id} 
                         onClick={() => doc.processing_status === 'COMPLETE' && setSelectedDoc(doc)}
-                        className={`p-4 transition-colors flex justify-between items-start ${
-                          doc.processing_status === 'COMPLETE' ? 'hover:bg-gray-50 cursor-pointer' : 'opacity-60 grayscale cursor-not-allowed'
-                        } ${selectedDoc?.id === doc.id ? 'bg-brand/5 border-l-4 border-l-brand' : ''}`}
+                        className={`p-4 transition-colors flex justify-between items-start gap-4 ${
+                          doc.processing_status === 'COMPLETE' ? 'hover:bg-gray-50/80 cursor-pointer' : 'opacity-60 grayscale cursor-not-allowed'
+                        } ${selectedDoc?.id === doc.id ? 'bg-brand/5 border-l-4 border-l-brand shadow-sm' : ''} ${selectedDocIds.includes(doc.id) ? 'bg-red-50/40' : ''}`}
                       >
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-gray-900">{doc.title}</span>
-                          <div className="flex items-center space-x-2 mt-1">
-                            <span className="text-[10px] font-bold text-gray-400 uppercase">{doc.document_type.replace(/_/g, ' ')}</span>
-                            <span className="text-gray-300">•</span>
-                            <span className="text-[10px] font-medium text-gray-500">{new Date(doc.created_at).toLocaleDateString()}</span>
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={selectedDocIds.includes(doc.id)}
+                            onClick={(e) => toggleSelectDoc(e, doc.id)}
+                            onChange={() => {}}
+                            className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-brand focus:ring-brand accent-brand cursor-pointer"
+                          />
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="text-sm font-bold text-gray-900 leading-snug break-words">{doc.title}</span>
+                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-gray-100 text-gray-600 border border-gray-200/60">
+                                {doc.document_type.replace(/_/g, ' ')}
+                              </span>
+                              <span className="text-gray-300">•</span>
+                              <span className="text-[10px] font-medium text-gray-500">{new Date(doc.created_at).toLocaleDateString()}</span>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-2 shrink-0 pt-0.5">
                           {/* Classification visible to admin only */}
                           {isAdmin && (
-                            <span className={`inline-flex items-center rounded px-2 py-0.5 text-[9px] font-bold ring-1 ring-inset ${
-                              doc.classification === 'PUBLIC' ? 'bg-green-50 text-green-700 ring-green-600/20' : 'bg-yellow-50 text-yellow-800 ring-yellow-600/20'
+                            <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide border ${
+                              doc.classification === 'PUBLIC' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' : 'bg-amber-50 text-amber-800 border-amber-200/80'
                             }`}>
                               {doc.classification}
                             </span>
                           )}
-                          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
-                            doc.processing_status === 'COMPLETE' ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-500'
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border ${
+                            doc.processing_status === 'COMPLETE' 
+                              ? 'bg-amber-50 text-amber-700 border-amber-200/80' 
+                              : 'bg-gray-100 text-gray-500 border-gray-200'
                           }`}>
                             {doc.processing_status}
                           </span>
+                          <button
+                            onClick={(e) => openDeleteModal(e, doc)}
+                            title="Delete Document"
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all border border-transparent hover:border-red-100"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
                         </div>
                       </li>
                     ))
@@ -846,13 +1305,159 @@ function DocumentsContent() {
                         </div>
                       </div>
                     ) : (
-                      <div className="aspect-[16/9] w-full bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-200">
-                        <div className="text-center">
-                          <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          <p className="text-xs font-bold text-gray-400 mt-2 uppercase tracking-widest">Secure Document Viewer</p>
+                      <div className="space-y-4">
+                        {/* Document Metadata Header Banner */}
+                        <div className="bg-gray-50/90 p-4 rounded-xl border border-gray-200/80 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+                          <div className="flex items-center space-x-3.5">
+                            <div className="h-11 w-11 bg-amber-100/90 border border-amber-300/60 text-amber-900 font-black rounded-xl flex items-center justify-center text-xs uppercase font-mono shadow-xs shrink-0">
+                              {selectedDoc.s3_key?.split('.').pop() || 'DOC'}
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-bold text-gray-900 leading-snug">{selectedDoc.title}</h4>
+                              <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                                Type: <span className="font-bold text-gray-700">{selectedDoc.document_type.replace(/_/g, ' ')}</span> | 
+                                Size: <span className="font-bold text-gray-700">{formatFileSize(selectedDoc.file_size_bytes)}</span>
+                                {selectedDoc.notes && <> | Keywords: <span className="text-amber-800 font-semibold">{selectedDoc.notes}</span></>}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a 
+                              href={`/api/documents/${selectedDoc.id}/download?download=1`} 
+                              download
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
+                              className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-black rounded-xl transition-all uppercase tracking-wider flex items-center gap-2 shadow-md hover:shadow-lg border border-slate-800 active:scale-95 shrink-0"
+                            >
+                              <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                              <span style={{ color: '#ffffff' }} className="text-white font-black tracking-wider">Download Original File</span>
+                            </a>
+                          </div>
                         </div>
+
+                        {/* Workspace Tab Bar: Visual Document Preview vs Extracted AI Chunks */}
+                        <div className="flex border-b border-gray-200 gap-6 pt-1">
+                          <button
+                            onClick={() => setViewerTab('preview')}
+                            className={`pb-2.5 text-xs font-bold uppercase transition-colors border-b-2 flex items-center gap-1.5 ${
+                              viewerTab === 'preview' ? 'border-brand text-brand' : 'border-transparent text-gray-400 hover:text-gray-600'
+                            }`}
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            Document Visual Preview
+                          </button>
+                          <button
+                            onClick={() => setViewerTab('chunks')}
+                            className={`pb-2.5 text-xs font-bold uppercase transition-colors border-b-2 flex items-center gap-1.5 ${
+                              viewerTab === 'chunks' ? 'border-brand text-brand' : 'border-transparent text-gray-400 hover:text-gray-600'
+                            }`}
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            Extracted AI Index ({docChunks.length})
+                          </button>
+                        </div>
+
+                        {/* TAB 1: VISUAL DOCUMENT PREVIEW */}
+                        {viewerTab === 'preview' && (
+                          <div className="w-full min-h-[520px] bg-gray-100/70 rounded-xl overflow-hidden border border-gray-200 shadow-inner flex flex-col justify-center items-center">
+                            {selectedDoc ? (
+                              (() => {
+                                const fileExt = (selectedDoc.s3_key || '').toLowerCase().split('.').pop() || '';
+                                const inlinePreviewUrl = `/api/documents/${selectedDoc.id}/download`;
+                                const downloadUrl = `/api/documents/${selectedDoc.id}/download?download=1`;
+                                
+                                if (fileExt === 'pdf') {
+                                  return (
+                                    <object 
+                                      data={inlinePreviewUrl} 
+                                      type="application/pdf" 
+                                      className="w-full h-[540px] rounded-xl border-0"
+                                    >
+                                      <iframe 
+                                        src={inlinePreviewUrl} 
+                                        className="w-full h-full rounded-xl border-0" 
+                                        title={selectedDoc.title} 
+                                      />
+                                    </object>
+                                  );
+                                }
+
+                                if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(fileExt)) {
+                                  return (
+                                    <div className="w-full h-[540px] bg-gray-900 rounded-xl flex items-center justify-center p-4">
+                                      <img src={inlinePreviewUrl} alt={selectedDoc.title} className="max-h-full max-w-full object-contain rounded" />
+                                    </div>
+                                  );
+                                }
+
+                                if (fileExt === 'docx') {
+                                  return (
+                                    <NativeDocxViewer url={inlinePreviewUrl} />
+                                  );
+                                }
+                                
+                                if (['pptx', 'ppt', 'xlsx', 'xls', 'doc'].includes(fileExt)) {
+                                  return (
+                                    <NativeOfficeViewer 
+                                      docUrl={docFileUrl || inlinePreviewUrl} 
+                                      title={selectedDoc.title} 
+                                    />
+                                  );
+                                }
+
+                                return (
+                                  <div className="w-full h-[540px] bg-white p-6 overflow-y-auto font-mono text-xs text-gray-800 space-y-2 border border-gray-200 rounded-xl">
+                                    {docChunks.map((c, i) => (
+                                      <p key={i} className="whitespace-pre-wrap">{c.chunk_text}</p>
+                                    ))}
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <div className="py-12 text-center text-xs text-gray-400">
+                                Loading document visual preview...
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* TAB 2: EXTRACTED AI CHUNKS */}
+                        {viewerTab === 'chunks' && (
+                          <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 max-h-[500px] overflow-y-auto">
+                            <div className="flex justify-between items-center pb-3 border-b border-gray-100">
+                              <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide">Extracted Document Text Chunks</h4>
+                              <span className="text-[10px] font-semibold text-gray-400">{docChunks.length} Chunks Processed</span>
+                            </div>
+
+                            {chunksLoading ? (
+                              <div className="py-12 text-center">
+                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand mx-auto"></div>
+                                <p className="text-xs text-gray-400 mt-2">Loading document content...</p>
+                              </div>
+                            ) : docChunks.length > 0 ? (
+                              <div className="space-y-4">
+                                {docChunks.map((chunk, idx) => (
+                                  <div key={idx} className="p-3.5 bg-gray-50 rounded-lg border border-gray-100 space-y-1.5">
+                                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase">
+                                      <span>
+                                        {chunk.metadata?.slide_number ? `Slide ${chunk.metadata.slide_number}` : chunk.metadata?.page ? `Page ${chunk.metadata.page}` : `Chunk #${idx + 1}`}
+                                      </span>
+                                      <span>{chunk.metadata?.format || 'TEXT'}</span>
+                                    </div>
+                                    <p className="text-xs text-gray-700 leading-relaxed font-sans whitespace-pre-wrap">{chunk.chunk_text}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="py-8 text-center text-xs text-gray-500">
+                                <p className="font-medium">No extracted text chunks found.</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1173,6 +1778,105 @@ function DocumentsContent() {
                     {shareCopied ? 'Copied!' : 'Copy'}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Delete Confirmation Modal */}
+        {showDeleteModal && docToDelete && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150 border border-gray-100">
+              <div className="flex items-start space-x-4">
+                <div className="h-11 w-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100">
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-base font-bold text-gray-900">Delete Document?</h3>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Are you sure you want to delete <span className="font-semibold text-gray-900">"{docToDelete.title}"</span>? This will permanently remove the storage file, extracted content chunks, and vector index.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+                <button
+                  onClick={() => { setShowDeleteModal(false); setDocToDelete(null); }}
+                  disabled={deleteModalLoading}
+                  className="px-4 py-2 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors uppercase"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteDoc}
+                  disabled={deleteModalLoading}
+                  className="px-4 py-2 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-all uppercase flex items-center gap-2 shadow-sm shadow-red-200"
+                >
+                  {deleteModalLoading ? (
+                    <>
+                      <div className="animate-spin h-3.5 w-3.5 border-b-2 border-white rounded-full"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Document'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Bulk Delete Confirmation Modal */}
+        {showBulkDeleteModal && selectedDocIds.length > 0 && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150 border border-gray-100">
+              <div className="flex items-start space-x-4">
+                <div className="h-11 w-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100">
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-base font-bold text-gray-900">Delete {selectedDocIds.length} Selected Documents?</h3>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Are you sure you want to delete <span className="font-semibold text-gray-900">{selectedDocIds.length} documents</span>? This action is permanent and will remove all raw storage files, extracted content chunks, and AI search indexes.
+                  </p>
+                </div>
+              </div>
+
+              <div className="max-h-32 overflow-y-auto bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs space-y-1">
+                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Items to be deleted:</span>
+                {documents
+                  .filter(d => selectedDocIds.includes(d.id))
+                  .map(d => (
+                    <div key={d.id} className="text-gray-700 font-medium truncate">• {d.title}</div>
+                  ))}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+                <button
+                  onClick={() => setShowBulkDeleteModal(false)}
+                  disabled={bulkDeleteLoading}
+                  className="px-4 py-2 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors uppercase"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBulkDeleteDocs}
+                  disabled={bulkDeleteLoading}
+                  className="px-4 py-2 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-all uppercase flex items-center gap-2 shadow-sm shadow-red-200"
+                >
+                  {bulkDeleteLoading ? (
+                    <>
+                      <div className="animate-spin h-3.5 w-3.5 border-b-2 border-white rounded-full"></div>
+                      Deleting ({selectedDocIds.length})...
+                    </>
+                  ) : (
+                    `Delete ${selectedDocIds.length} Documents`
+                  )}
+                </button>
               </div>
             </div>
           </div>

@@ -1,6 +1,20 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import Sidebar from "./components/Sidebar";
 import "./globals.css";
+
+// Self-hosted at build time by next/font: no runtime requests to Google, no layout shift.
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter-sans",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-jetbrains-mono",
+});
 
 export const metadata: Metadata = {
   title: "Excredite Electricity Data Hub",
@@ -15,7 +29,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className="h-full antialiased"
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="h-full bg-[var(--background)] text-[var(--foreground)] flex" suppressHydrationWarning>

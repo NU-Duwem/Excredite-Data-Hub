@@ -16,8 +16,85 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-16 · Database security hardening (Supabase advisor findings)
+**Branch:** `dev` · **PR:** #5 · **Status:** Open
+
+**What and why:** Fixed every security warning the Supabase advisor reported that SQL can fix: 22 in all, none caused by the news work. Applied to the live Supabase project with the owner's approval, and saved as `09_security_hardening.sql`.
+
+| Finding | Fix |
+|---|---|
+| `get_user_role()` callable by anyone at `/rest/v1/rpc/get_user_role`, with no fixed `search_path` | Moved to a new `private` schema that the API doesn't expose, with `search_path` fixed. Signed-in users keep `EXECUTE`, because all 34 access policies call it, and those policies kept working unchanged. Anonymous users can no longer reach it. |
+| `handle_new_user()` (signup trigger) callable through the API, with no fixed `search_path` | `EXECUTE` revoked from `PUBLIC`, `anon` and `authenticated`, and `search_path` fixed. The trigger still fires: Postgres doesn't check `EXECUTE` when firing a trigger, which was confirmed with a test inside a rolled-back transaction. |
+| `rls_auto_enable()` (Supabase event trigger that turns on RLS for new tables) callable through the API | `EXECUTE` revoked. |
+| 16 partition tables (`generation_output_*`, `gas_supply_*`, `transmission_data_*`, `distribution_performance_*`) had RLS on but no policies | Each partition now has its parent's policies: any signed-in user can read, and admin, app and ingestion roles can insert. Signed-in users can now read a partition directly, but it's the same data they already see through the parent table. |
+| `pg_trgm` extension in the `public` schema | Moved to `extensions`. No indexes or app code use it, and `extensions` is on the default search path. |
+
+**Not fixable in SQL:** leaked-password protection is a dashboard setting, and requires a paid Supabase plan.
+
+**Files:**
+- `09_security_hardening.sql` (new)
+- `README.md` (full SQL run order and the dashboard step)
+- `CLAUDE.md` (new database conventions: use `private.get_user_role()`, rules for new `SECURITY DEFINER` functions, run the advisor after schema changes)
+
+**Manual steps:** in the Supabase dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**.
+
+**Tested:**
+- Before and after the change, simulated a signed-in admin, a signed-in non-admin and an anonymous visitor inside rolled-back transactions. Admin and non-admin saw identical counts on every table both times: profiles, plants, 87,763 generation rows, feeds, documents, matters and settings.
+- After the change, anonymous users are refused the `private` schema.
+- The trigger test confirmed a trigger fires after `EXECUTE` is revoked, and left nothing behind.
+- The security advisor now reports only leaked-password protection, down from 22 warnings.
+
+---
+
+## 2026-11-15 · Hourly news schedule switched on; refresh for every user
+**Branch:** `dev` · **PR:** #5 · **Status:** Open
+
+**What and why:** News should update hourly, and anyone, not only admins, should be able to pull the latest on demand.
+
+**Live database** (applied to the Supabase project with the owner's approval):
+- Applied `07_news_ingestion.sql`. It hadn't been run before, so the news table had no RSS columns and no feeds; 21 feeds are now stored, 16 active.
+- New `08_news_schedule.sql`, also applied:
+  - switches on `pg_cron` and `pg_net`;
+  - generates a random cron secret inside the database and stores it encrypted in Supabase Vault, so it never appears in the job, the code or chat;
+  - adds the function `epdh_trigger_news_ingest()`, which can't be called through the API (EXECUTE revoked from `anon` and `authenticated`);
+  - schedules the hourly job `epdh-ingest-news-hourly` (`7 * * * *`).
+- The job reads the app's address from `system_settings.news_ingest_url`. That's empty because the app isn't deployed yet, so the job currently runs and does nothing.
+- Verified: the job is active, the secret exists (its value wasn't read), the function isn't exposed, a dry run made no request, and the Supabase security advisor flags nothing new.
+
+**App:**
+- **Who can refresh:** `/api/news/ingest` now accepts any active signed-in user, not just admins.
+  - A signed-in user must use `POST`, so a browser prefetch (`GET`) can never start a pull.
+  - Manual refreshes share one 5-minute cool-down across all users. Extra clicks get HTTP 429 with how long to wait.
+  - The cool-down is claimed with a single conditional UPDATE, so two simultaneous clicks can't both start a pull.
+  - Scheduled runs skip the cool-down but record their start time, so a click right after a scheduled pull is throttled.
+  - Manual refreshes are written to `user_activity_log` as `NEWS_REFRESH`.
+- **News page:** the **Refresh feeds** button now shows for every signed-in user, and the page text says news updates hourly.
+- **Overview:** a new refresh icon on the "Latest news" tile. It spins while working, shows the result or the wait time, and reloads the two headlines.
+- **Shared messages:** both controls use `utils/news/refreshClient.ts`, so their wording is identical. It covers new articles, unreachable sources, the cool-down, an expired sign-in, server errors and offline.
+
+**Files:**
+- `08_news_schedule.sql` (new)
+- `07_news_ingestion.sql` (optional block now points to 08)
+- `frontend/utils/news/cooldown.ts` (new), `frontend/utils/news/refreshClient.ts` (new)
+- `frontend/app/api/news/ingest/route.ts`, `frontend/app/news/page.tsx`, `frontend/app/page.tsx`
+- `frontend/utils/news/__tests__/cooldown.test.ts` (new), `refreshClient.test.ts` (new)
+- `README.md`, `Tracked-changes.md` (PR #4 entries marked Merged)
+
+**Manual steps** (once the app is deployed):
+1. `UPDATE public.system_settings SET value = 'https://<your-app-domain>' WHERE key = 'news_ingest_url';`
+2. Copy the secret from `SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'epdh_cron_secret';` into the app's `CRON_SECRET`.
+3. Check runs with `SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;`.
+
+**Tested:**
+- 112 out of 112 tests pass, 25 of them new. They cover claims, refusals, two simultaneous clicks, a missing row, repairing bad values, sub-second waits, a missing table, every refresh message, the 429 fallback header, a 504 HTML page and offline.
+- Confirmed on the live database that comparing ISO timestamps as text orders correctly under its `en_US.UTF-8` collation.
+- Lint is clean and the production build passes.
+- Both controls rendered in Chromium as a non-admin user, showing the cool-down message.
+
+---
+
 ## 2026-11-15 · Edge-case tests for RSS news pulling, and the fixes they led to
-**Branch:** `dev` · **PR:** #4 · **Status:** Open
+**Branch:** `dev` · **PR:** #4 · **Status:** Merged
 
 **What and why:** Added the project's first automated test suite: 87 tests covering the RSS parser, the electricity filter, the ingester and the cron-secret check. Writing them turned up 11 real problems, which are now fixed.
 
@@ -73,7 +150,7 @@ Also: database writes now go in batches of 100 rows. The cron-secret check moved
 ---
 
 ## 2026-11-15 · Automatic electricity news from RSS feeds
-**Branch:** `dev` · **PR:** #4 · **Status:** Open
+**Branch:** `dev` · **PR:** #4 · **Status:** Merged
 
 **What and why:** The News & Updates page now fills itself from RSS feeds of Nigerian outlets and international power-sector trade press. Before this change it showed hard-coded sample articles.
 - **Sources:** a new `news_sources` table holds the feed list. 21 feeds are seeded: 12 local and 9 foreign, with 16 active. Five are seeded inactive because they blocked or failed requests from a cloud server during testing; they can be switched on to try from Vercel.
@@ -121,7 +198,7 @@ Also: database writes now go in batches of 100 rows. The cron-secret check moved
 ---
 
 ## 2026-11-15 · `Tracked-changes.md` change log
-**Branch:** `dev` · **PR:** #4 · **Status:** Open
+**Branch:** `dev` · **PR:** #4 · **Status:** Merged
 
 **What and why:** Added this file to record every change to the project, past and future. `CLAUDE.md` now requires Claude to add an entry with every change.
 

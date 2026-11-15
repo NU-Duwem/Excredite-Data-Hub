@@ -38,6 +38,10 @@ To set up the database schema and RLS policies, execute the SQL files in your Su
 1. `schema.sql` - Provisions the core tables (organizations, plants, telemetry, matters).
 2. `01_supabase_backend_setup.sql` - Configures `user_profiles`, database triggers, and all Row Level Security (RLS) policies.
 3. `02_seed_data.sql` - Seeds initial Nigerian power sector data (States, GENCOs, DISCOs, TCN).
+4. `03_epdh_updates.sql` to `06_document_embeddings_setup.sql` - Settings, activity log, news, matters and document embeddings.
+5. `07_news_ingestion.sql` and `08_news_schedule.sql` - RSS news feeds and the hourly pull (see step 5 below).
+6. `09_security_hardening.sql` - Fixes the Supabase security advisor findings. After this, new SQL must call `private.get_user_role()`; `public.get_user_role()` no longer exists.
+7. In the dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**. This is not available in SQL, and needs a paid Supabase plan.
 
 ### 2. Frontend Setup
 Navigate to the frontend directory:
@@ -68,10 +72,19 @@ npm test
 ```
 
 ### 5. News ingestion (RSS)
-1. Run `07_news_ingestion.sql` in the Supabase SQL Editor. It creates `news_sources` and seeds the feed list.
-2. Set `CRON_SECRET` in Vercel. `frontend/vercel.json` schedules a daily pull. For hourly pulls, use the optional `pg_cron` block at the end of `07_news_ingestion.sql`.
-3. Admins can pull immediately with **Refresh feeds** on the News & Updates page.
+1. Run `07_news_ingestion.sql`, then `08_news_schedule.sql`, in the Supabase SQL Editor. Together they:
+   - create `news_sources` and seed the feed list;
+   - switch on `pg_cron` and `pg_net`;
+   - store a randomly generated cron secret in Supabase Vault;
+   - schedule an hourly pull at 7 minutes past each hour.
+2. Once the app is deployed, connect the hourly job to it:
+   - Set its address: `UPDATE public.system_settings SET value = 'https://<your-app-domain>' WHERE key = 'news_ingest_url';`
+   - Copy the generated secret into the app's `CRON_SECRET` environment variable. Read it with `SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'epdh_cron_secret';`.
+
+   Until the address is set, the hourly job runs but does nothing.
+3. Any signed-in user can pull immediately: **Refresh feeds** on News & Updates, or the refresh icon on the Overview's "Latest news" tile. Only one manual pull runs per 5 minutes across everyone.
 4. Add, remove or pause feeds in the `news_sources` table. Use `filter_by_keywords = true` for general news sites, so only electricity stories are kept.
+5. `frontend/vercel.json` also schedules a daily pull as a backup when hosted on Vercel. It's harmless to keep, and safe to delete.
 
 ### 4. Running the Application
 Start the Next.js development server:

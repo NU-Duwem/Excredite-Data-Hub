@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { requestFeedRefresh, type RefreshOutcome } from '@/utils/news/refreshClient';
 
 interface NewsArticle {
   id: string;
@@ -16,13 +17,6 @@ interface NewsArticle {
 }
 
 type RegionFilter = 'ALL' | 'LOCAL' | 'FOREIGN';
-
-type IngestSummary = {
-  sources: number;
-  inserted: number;
-  failed: number;
-  results: { source: string; status: 'OK' | 'ERROR'; inserted: number; error?: string }[];
-};
 
 const PAGE_SIZE = 30;
 
@@ -74,17 +68,13 @@ export default function NewsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sources, setSources] = useState<string[]>([]);
 
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [refreshNote, setRefreshNote] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [refreshNote, setRefreshNote] = useState<RefreshOutcome | null>(null);
 
-  // Admin check (for the "Refresh feeds" button) and the source list for the filter.
+  // Any signed-in user may refresh feeds; also load the source list for the filter.
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return;
-      const { data } = await supabase.from('user_profiles').select('role').eq('id', user.id).single();
-      setIsAdmin(data?.role === 'power_admin');
-    });
+    supabase.auth.getUser().then(({ data: { user } }) => setSignedIn(!!user));
     supabase
       .from('news_sources')
       .select('name')
@@ -163,26 +153,18 @@ export default function NewsPage() {
   const refreshFeeds = async () => {
     setRefreshing(true);
     setRefreshNote(null);
-    try {
-      const res = await fetch('/api/news/ingest', { method: 'POST' });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      const s = body as IngestSummary;
-      const failedNames = s.results.filter((r) => r.status === 'ERROR').map((r) => r.source);
-      setRefreshNote({
-        kind: 'ok',
-        text:
-          `${s.inserted} new article${s.inserted === 1 ? '' : 's'} from ${s.sources} source${s.sources === 1 ? '' : 's'}.` +
-          (failedNames.length ? ` Could not reach: ${failedNames.join(', ')}.` : ''),
-      });
-      const rows = await fetchPage(0);
-      setArticles(rows);
-      setHasMore(rows.length === PAGE_SIZE);
-    } catch (err) {
-      setRefreshNote({ kind: 'error', text: err instanceof Error ? err.message : 'Refresh failed' });
-    } finally {
-      setRefreshing(false);
+    const outcome = await requestFeedRefresh();
+    setRefreshNote(outcome);
+    if (outcome.kind === 'ok') {
+      try {
+        const rows = await fetchPage(0);
+        setArticles(rows);
+        setHasMore(rows.length === PAGE_SIZE);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not load news');
+      }
     }
+    setRefreshing(false);
   };
 
   const filtersActive = region !== 'ALL' || source !== 'All' || searchQuery.trim() !== '';
@@ -194,10 +176,10 @@ export default function NewsPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">News &amp; Updates</h1>
             <p className="mt-1 text-sm text-gray-600">
-              Electricity-sector news from Nigerian outlets and international trade press, pulled automatically from RSS feeds.
+              Electricity-sector news from Nigerian outlets and international trade press, pulled automatically every hour from RSS feeds.
             </p>
           </div>
-          {isAdmin && (
+          {signedIn && (
             <button
               type="button"
               onClick={refreshFeeds}
@@ -216,10 +198,10 @@ export default function NewsPage() {
           <div
             role="status"
             className={`rounded-xl px-4 py-3 text-sm ${
-              refreshNote.kind === 'ok' ? 'bg-accent-soft text-accent-ink' : 'bg-red-50 text-red-700'
+              refreshNote.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-accent-soft text-accent-ink'
             }`}
           >
-            {refreshNote.text}
+            {refreshNote.message}
           </div>
         )}
 
@@ -293,8 +275,8 @@ export default function NewsPage() {
             </p>
             {!filtersActive && (
               <p className="text-sm text-gray-600">
-                {isAdmin
-                  ? 'Use “Refresh feeds” to fetch the latest articles now.'
+                {signedIn
+                  ? 'Feeds are pulled automatically every hour. Use “Refresh feeds” to fetch the latest articles now.'
                   : 'Articles appear here automatically once the feeds have been fetched.'}
               </p>
             )}

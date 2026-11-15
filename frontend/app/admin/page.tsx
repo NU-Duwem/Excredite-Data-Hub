@@ -10,17 +10,16 @@ const modulesList = [
   { id: 'history', name: 'Conversation History', path: '/history' },
   { id: 'alerts', name: 'Anomaly Alerts', path: '/alerts' },
   { id: 'documents', name: 'Documents Manager', path: '/documents' },
-  { id: 'forecasts', name: 'Forecasts & Models', path: '/forecasts' },
   { id: 'matters', name: 'Regulatory & Advisory Matters', path: '/matters' },
   { id: 'news', name: 'News & Updates', path: '/news' },
 ];
 
 const initialPermissions: Record<string, string[]> = {
-  power_admin: ['query', 'history', 'alerts', 'documents', 'forecasts', 'matters', 'news'],
-  power_ceo: ['query', 'history', 'alerts', 'documents', 'forecasts', 'matters', 'news'],
+  power_admin: ['query', 'history', 'alerts', 'documents', 'matters', 'news'],
+  power_ceo: ['query', 'history', 'alerts', 'documents', 'matters', 'news'],
   power_legal: ['query', 'history', 'matters'],
-  power_analyst: ['query', 'history', 'alerts', 'documents', 'forecasts', 'news'],
-  power_app: ['query', 'history', 'alerts', 'documents', 'forecasts', 'matters', 'news'],
+  power_analyst: ['query', 'history', 'alerts', 'documents', 'news'],
+  power_app: ['query', 'history', 'alerts', 'documents', 'matters', 'news'],
   power_ingestion: ['query', 'history', 'documents'],
   power_team: ['query', 'history'],
 };

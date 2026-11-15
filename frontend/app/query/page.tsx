@@ -75,6 +75,24 @@ export default function QueryPage() {
   const [showDocDropdown, setShowDocDropdown] = useState(false);
   const [docNotification, setDocNotification] = useState<{ title: string; section: string; tab: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Accept a question handed over from the Overview page (/query?q=...): fill the box
+  // through the DOM and submit it the same way a user would, exactly once.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q');
+    const el = textareaRef.current;
+    if (!q || !q.trim() || !el) return;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    setValue?.call(el, q);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    const id = window.setTimeout(() => {
+      window.history.replaceState(null, '', window.location.pathname);
+      formRef.current?.requestSubmit();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, []);
 
   // Automatically persist live conversation history to localStorage
   useEffect(() => {
@@ -349,8 +367,9 @@ export default function QueryPage() {
       {/* Input Area */}
       <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto">
-          <form onSubmit={handleSubmit} className="relative flex items-center">
+          <form ref={formRef} onSubmit={handleSubmit} className="relative flex items-center">
             <textarea
+              ref={textareaRef}
               rows={1}
               value={query}
               onChange={(e) => setQuery(e.target.value)}

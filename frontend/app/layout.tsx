@@ -32,9 +32,10 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="h-full bg-[var(--background)] text-[var(--foreground)] flex" suppressHydrationWarning>
+      <body className="h-full bg-background text-foreground flex md:gap-4 md:p-4" suppressHydrationWarning>
         <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Content tile: pages render inside one rounded surface on the canvas */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-gray-50 md:rounded-2xl md:shadow-[0_1px_2px_rgba(10,58,34,0.06)]">
           {children}
         </div>
       </body>

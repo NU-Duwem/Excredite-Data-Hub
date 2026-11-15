@@ -54,9 +54,8 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 w-full">
       <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-lg border border-gray-100">
         <div>
-          <div className="mx-auto h-12 w-12 bg-brand rounded-lg flex items-center justify-center shadow-md">
-            <span className="text-white font-bold text-xl tracking-tight">EPDH</span>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/excredite-wordmark.png" alt="Excredite" width={180} height={35} className="mx-auto h-auto w-[180px]" />
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 tracking-tight">
             Create New Password
           </h2>

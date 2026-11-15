@@ -1327,7 +1327,7 @@ function DocumentsContent() {
                               download
                               target="_blank" 
                               rel="noopener noreferrer" 
-                              style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
+                              style={{ backgroundColor: 'var(--brand)', color: '#ffffff' }}
                               className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-black rounded-xl transition-all uppercase tracking-wider flex items-center gap-2 shadow-md hover:shadow-lg border border-slate-800 active:scale-95 shrink-0"
                             >
                               <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

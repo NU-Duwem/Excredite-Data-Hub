@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-15 · Edge-case tests for RSS news pulling, and the fixes they led to
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #4 · **Status:** Open
 
 **What and why:** Added the project's first automated test suite: 87 tests covering the RSS parser, the electricity filter, the ingester and the cron-secret check. Writing them turned up 11 real problems, which are now fixed.
 
@@ -73,7 +73,7 @@ Also: database writes now go in batches of 100 rows. The cron-secret check moved
 ---
 
 ## 2026-11-15 · Automatic electricity news from RSS feeds
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #4 · **Status:** Open
 
 **What and why:** The News & Updates page now fills itself from RSS feeds of Nigerian outlets and international power-sector trade press. Before this change it showed hard-coded sample articles.
 - **Sources:** a new `news_sources` table holds the feed list. 21 feeds are seeded: 12 local and 9 foreign, with 16 active. Five are seeded inactive because they blocked or failed requests from a cloud server during testing; they can be switched on to try from Vercel.
@@ -121,7 +121,7 @@ Also: database writes now go in batches of 100 rows. The cron-secret check moved
 ---
 
 ## 2026-11-15 · `Tracked-changes.md` change log
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #4 · **Status:** Open
 
 **What and why:** Added this file to record every change to the project, past and future. `CLAUDE.md` now requires Claude to add an entry with every change.
 

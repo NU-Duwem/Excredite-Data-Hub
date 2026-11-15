@@ -1,0 +1,232 @@
+# Tracked Changes — Excredite Electricity Data Hub (EPDH)
+
+This file records every change made to the project, newest first. It covers the earlier history (rebuilt from the git log) and everything after it. Claude adds an entry with every change (see `CLAUDE.md`), and people making changes by hand should add one too.
+
+**Entry format:**
+- date · branch · PR · status;
+- what changed and why;
+- files touched;
+- manual steps (SQL to run, environment variables, settings);
+- how it was tested.
+
+**Status values:**
+- **Open:** in a pull request that hasn't merged yet.
+- **Merged:** in `main`.
+- **Committed:** pushed straight to `main`, without a PR.
+
+---
+
+## 2026-11-15 · Automatic electricity news from RSS feeds
+**Branch:** `dev` · **PR:** pending · **Status:** Open
+
+**What and why:** The News & Updates page now fills itself from RSS feeds of Nigerian outlets and international power-sector trade press. Before this change it showed hard-coded sample articles.
+- **Sources:** a new `news_sources` table holds the feed list. 21 feeds are seeded: 12 local and 9 foreign, with 16 active. Five are seeded inactive because they blocked or failed requests from a cloud server during testing; they can be switched on to try from Vercel.
+- **Ingester (`/api/news/ingest`):**
+  - fetches every active feed, five at a time, with a 15-second timeout each;
+  - reads RSS 2.0, RSS 1.0 and Atom formats;
+  - keeps only the last 30 days of items;
+  - saves each article's title, a short summary (up to 500 characters), link, image, date, source and region (local or foreign);
+  - never stores full article text;
+  - can only be called by a scheduler holding `CRON_SECRET` or by a signed-in admin.
+- **Electricity filter:** general news sites (Punch, Vanguard, ThisDay and others) keep only stories that match electricity keywords, such as NERC, DisCo, grid, megawatt and the plant names. Bare "power", "tariff" and "outage" are not keywords, because they catch politics, trade and telecom stories. Energy-specific feeds keep every item.
+- **No duplicates:** a unique index on `news_articles.url` means a re-run never stores the same article twice. Each feed's last result and error are recorded on its `news_sources` row.
+- **Schedule:** Vercel Cron runs daily at 05:17 UTC (`vercel.json`). An optional hourly schedule through Supabase `pg_cron` is included in the SQL file.
+- **News & Updates page:**
+  - real data only; the sample articles are gone;
+  - Nigeria / International / All tabs, a source filter (previously defined but never shown) and server-side search;
+  - "Load more" in pages of 30, thumbnails where the feed provides an image, and an "Anomaly flagged" badge driven by `anomaly_alerts.news_id`;
+  - a "Refresh feeds" button for admins;
+  - clear messages when there's no news yet or when nothing matches the filters.
+
+**Files:**
+- `07_news_ingestion.sql` (new)
+- `frontend/utils/news/rss.ts` (new)
+- `frontend/utils/news/relevance.ts` (new)
+- `frontend/utils/news/ingest.ts` (new)
+- `frontend/app/api/news/ingest/route.ts` (new)
+- `frontend/vercel.json` (new)
+- `frontend/app/news/page.tsx`
+- `frontend/package.json` and `package-lock.json` (adds `fast-xml-parser`)
+- `README.md`, `CLAUDE.md`, `Tracked-changes.md`
+
+**Manual steps:**
+1. Run `07_news_ingestion.sql` in the Supabase SQL Editor.
+2. In Vercel, set `CRON_SECRET` to a long random string, and make sure `SUPABASE_SERVICE_ROLE_KEY` is set. `vercel.json` sits in `frontend/`, which assumes the Vercel project's Root Directory is `frontend`.
+3. Optional, for hourly updates: enable `pg_cron` and `pg_net`, then run the commented block at the end of the SQL file with your domain and secret filled in.
+4. Sign in as an admin and click **Refresh feeds** on News & Updates for the first pull.
+
+**Tested:**
+- Parser and filter run against all 17 candidate feeds live. Feeds parsed correctly, and the filter kept power-sector stories and dropped crime and politics.
+- End-to-end run of the ingester with a stand-in database: articles saved, a second run saved 0 duplicates, and a broken feed was recorded as an error without stopping the rest.
+- Production build and lint pass.
+- News page rendered in Chromium with sample rows.
+- Not yet run against the real Supabase project.
+
+---
+
+## 2026-11-15 · `Tracked-changes.md` change log
+**Branch:** `dev` · **PR:** pending · **Status:** Open
+
+**What and why:** Added this file to record every change to the project, past and future. `CLAUDE.md` now requires Claude to add an entry with every change.
+
+**Files:** `Tracked-changes.md` (new), `CLAUDE.md`
+
+---
+
+## 2026-11-15 · Single shared branch for Claude's work (`CLAUDE.md`)
+**Branch:** `dev` · **PR:** #3 · **Status:** Merged
+
+**What and why:** Claude sessions in VS Code, the CLI and the web were each creating their own branch and PR. `CLAUDE.md` now tells Claude to:
+- work only on `dev`;
+- reset `dev` to `main` after each merge;
+- keep at most one open PR from `dev` into `main`.
+
+Also deleted the leftover `claude/fervent-archimedes-55u8ic` branch. GitHub refused this session's attempt to delete the remote `feature/bento-redesign` and `chore/windows-dev-scripts-remove-forecasts` branches. Both are fully merged, so they're safe to delete by hand.
+
+**Files:** `CLAUDE.md` (new)
+
+---
+
+## 2026-11-15 · Remove Forecasts from the sidebar and admin permissions
+**Branch:** `chore/windows-dev-scripts-remove-forecasts`, moved to `dev` · **PR:** #3 · **Status:** Merged
+*(Made in a Claude session in VS Code.)*
+
+**What and why:** Removed the Forecasts entry from the sidebar and from the admin panel's list of permission modules.
+
+**Files:** `frontend/app/admin/page.tsx`, `frontend/app/components/Sidebar.tsx`
+
+---
+
+## 2026-11-15 · Make npm scripts work on Windows, and delete the Forecasts page
+**Branch:** `chore/windows-dev-scripts-remove-forecasts`, moved to `dev` · **PR:** #3 · **Status:** Merged
+*(Made in a Claude session in VS Code.)*
+
+**What and why:**
+- The `dev`, `build` and `start` scripts used the Unix-only `NODE_OPTIONS='…'` syntax. They now call `node --max-old-space-size=8192 node_modules/next/dist/bin/next …`, which works on Windows, macOS and Linux.
+- Deleted the Forecasts page, which only showed synthetic chart data.
+
+**Files:** `frontend/package.json`, `frontend/app/forecasts/page.tsx` (deleted)
+
+---
+
+## 2026-11-15 · Bento redesign and Overview dashboard
+**Branch:** `feature/bento-redesign` · **PR:** #2 · **Status:** Merged
+
+**What and why:** Picked from five design concepts.
+- **Colours:** the Excredite logo's colours replace the old gold `#b58e23`:
+  - forest green `#0A3A22` for the main colour;
+  - amber `#FFA100` for highlights;
+  - a pale green-grey background.
+- **All pages:** Tailwind's gray and slate scales and the card corner sizes were retinted in `globals.css`, so every page adopted the new look without code changes.
+- **App layout:** the sidebar and the page content now sit as rounded panels.
+- **Sidebar:**
+  - cropped logo images;
+  - green highlight for the current page, with an amber icon;
+  - amber alert badge;
+  - new Overview link;
+  - hidden on all sign-in pages, not just `/login`.
+- **Overview page (`/`):** a new dashboard with live Supabase tiles:
+  - daily generation for the latest 14 days in the database, with anomaly days in amber;
+  - installed capacity;
+  - open alerts;
+  - next matter deadlines;
+  - document processing status;
+  - latest news.
+
+  Its quick-question box hands the question to `/query?q=…`, which sends it automatically.
+- **Other:** sign-in pages use the logo instead of an overflowing "EPDH" badge. The forecast chart and remaining hard-coded colours moved to the new palette.
+
+**Files:**
+- `frontend/app/globals.css`, `frontend/app/layout.tsx`, `frontend/app/page.tsx`
+- `frontend/app/components/Sidebar.tsx`, `frontend/app/query/page.tsx`
+- the four sign-in pages
+- `documents/page.tsx`, `forecasts/page.tsx`, `profile/page.tsx`
+- `frontend/public/excredite-wordmark.png` (new), `frontend/public/excredite-mark.png` (new)
+
+**Tested:**
+- Production build passes.
+- Rendered in Chromium at 1440 px and 390 px with stand-in Supabase data.
+- Not yet checked against the real database.
+
+---
+
+## 2026-11-12 · Load the Inter and JetBrains Mono fonts
+**Branch:** `claude/fervent-archimedes-55u8ic` · **PR:** #1 (closed) → #2 · **Status:** Merged
+
+**What and why:** The CSS named Inter but never loaded it, so most users saw a system font. Inter (for text) and JetBrains Mono (for code and `font-mono`) are now loaded with `next/font`, bundled at build time and served from the app itself.
+
+**Files:** `frontend/app/layout.tsx`, `frontend/app/globals.css`
+
+**Tested:** Production build passed, and the browser confirmed both fonts load.
+
+---
+
+## Earlier history (before the change log; rebuilt from git)
+
+### 2026-08-14 · Document processing pipeline and saved chat sessions
+`6e58dfb` · Committed
+- **Document processing:**
+  - text is extracted from PDF, Word, PowerPoint and Excel files (`utils/documentProcessor.ts`);
+  - it's split into chunks and embedded with Gemini;
+  - chunks are stored in `embeddings` using pgvector (`06_document_embeddings_setup.sql`).
+- **Document API routes:** fetch or delete a document, download it, ask questions about it, bulk delete, and process.
+- **AI chat:** can search uploaded documents, and conversations are saved in the browser.
+
+**Files:** `06_document_embeddings_setup.sql`, `frontend/app/api/documents/*`, `frontend/utils/documentProcessor.ts`, `frontend/app/api/chat/route.ts`, `documents/page.tsx`, `query/page.tsx`, `history/page.tsx`, `next.config.ts`, `package.json`
+
+### 2026-07-22 · Matters renamed to engagements; regulatory fields; deadline tracking
+`e77c11a` · Committed
+- Matters became "engagements", with regulatory data fields and deadline-tracking UI.
+- Added role display names (`utils/roles.ts`).
+
+**Files:** `admin`, `alerts`, `matters` and `profile` pages; `Sidebar.tsx`; `utils/roles.ts` (new)
+
+### 2026-07-19 · AI document editing, tab URLs and role-based access
+`792d26a` · Committed
+- AI-assisted document editing.
+- The Documents page's tabs are reflected in the URL (`?tab=`).
+- Role-based access control across the main pages.
+
+**Files:** `alerts`, `documents`, `history`, `matters`, `news` and `query` pages; `Sidebar.tsx`
+
+### 2026-07-15 · Legal matters linked to document uploads; seed cases
+`9ebc48c` · Committed
+- Documents can be linked to legal matters.
+- Seeded 3 matters (`05_db_updates.sql`) and fixed a name typo (`04_name_fix.sql`).
+- Added the document edit API.
+- Merged the Briefing Notes page into Documents.
+
+**Files:** `04_name_fix.sql`, `05_db_updates.sql`, `frontend/app/api/documents/edit/route.ts` (new), `frontend/app/briefing/page.tsx` (deleted), and several pages
+
+### 2026-07-13 · Sign-up, password reset and admin user management
+`a98889e` · Committed
+- Sign-up, forgot-password and reset-password pages.
+- Admin user-management API.
+- Document upload API.
+- News page created (it showed sample data at the time).
+- Database: settings, activity log, per-document access and news tables, plus wider anomaly alerts and their access rules (`03_epdh_updates.sql`).
+
+**Files:** `03_epdh_updates.sql`, `frontend/app/api/admin/users/route.ts`, `frontend/app/api/documents/upload/route.ts`, `frontend/app/news/page.tsx`, the sign-in pages, and others
+
+### 2026-07-11 · Admin dashboard and AI chat route
+`76b4c25` · Committed
+- Admin page for user management and role permissions.
+- The AI chat API route (`api/chat/route.ts`).
+
+**Files:** `frontend/app/admin/page.tsx` (new), `frontend/app/api/chat/route.ts` (new), `Sidebar.tsx`, `query/page.tsx`, `package.json`
+
+### 2026-06-01 · NESI operational data archive
+`282788c` · Committed
+- Added `NESI_CSV.zip`: 110 monthly CSVs of grid operational data from 2014 onward.
+
+### 2026-05-16 · First frontend build and document management screen
+`99c65b0` · Committed
+- Built out the first version of the Next.js frontend pages.
+- Added the Not Found page.
+
+### 2026-05-11 to 2026-05-15 · Project start
+`820c121`, `10fe367`, `cdb48e5`, `66fad8a` · Committed / merged
+- First upload of the project:
+  - database schema and access rules (`schema.sql`, `01_supabase_backend_setup.sql`);
+  - seed data (`02_seed_data.sql`);
+  - technical documentation and the first Next.js frontend.

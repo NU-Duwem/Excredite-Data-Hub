@@ -56,7 +56,16 @@ Create a `.env.local` file in the `frontend` directory with your Supabase creden
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://<your-project-id>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_publishable_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key     # server-side API routes only
+GEMINI_API_KEY=your_gemini_key                      # and/or ANTHROPIC_API_KEY
+CRON_SECRET=a_long_random_string                    # protects /api/news/ingest
 ```
+
+### 5. News ingestion (RSS)
+1. Run `07_news_ingestion.sql` in the Supabase SQL Editor. It creates `news_sources` and seeds the feed list.
+2. Set `CRON_SECRET` in Vercel. `frontend/vercel.json` schedules a daily pull. For hourly pulls, use the optional `pg_cron` block at the end of `07_news_ingestion.sql`.
+3. Admins can pull immediately with **Refresh feeds** on the News & Updates page.
+4. Add, remove or pause feeds in the `news_sources` table. Use `filter_by_keywords = true` for general news sites, so only electricity stories are kept.
 
 ### 4. Running the Application
 Start the Next.js development server:

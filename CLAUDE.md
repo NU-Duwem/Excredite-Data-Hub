@@ -19,3 +19,18 @@ This applies in every environment: VS Code, the CLI, Claude Code on the web and 
   - If an open PR from `dev` already exists, push to `dev` to update it. Don't open a new one.
   - Open a new PR only when none is open, and only when asked.
 - **Never push directly to `main`.**
+
+## Change log: `Tracked-changes.md`
+
+`Tracked-changes.md` at the repository root records every change made to this project.
+
+- **Every change you make must add an entry**, in the same commit as the change. Put the newest entry at the top of the log.
+- **Each entry has:**
+  - the date;
+  - the branch, and the PR once there is one;
+  - a short title;
+  - what changed and why;
+  - the files touched;
+  - any manual steps the team must take, such as SQL to run or environment variables to set;
+  - how it was tested.
+- **When a PR merges, update its entry** from "Open" to "Merged".

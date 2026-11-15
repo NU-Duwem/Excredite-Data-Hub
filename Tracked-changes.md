@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-16 · Database security hardening (Supabase advisor findings)
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #5 · **Status:** Open
 
 **What and why:** Fixed every security warning the Supabase advisor reported that SQL can fix: 22 in all, none caused by the news work. Applied to the live Supabase project with the owner's approval, and saved as `09_security_hardening.sql`.
 
@@ -47,7 +47,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-15 · Hourly news schedule switched on; refresh for every user
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #5 · **Status:** Open
 
 **What and why:** News should update hourly, and anyone, not only admins, should be able to pull the latest on demand.
 

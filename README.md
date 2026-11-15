@@ -68,10 +68,19 @@ npm test
 ```
 
 ### 5. News ingestion (RSS)
-1. Run `07_news_ingestion.sql` in the Supabase SQL Editor. It creates `news_sources` and seeds the feed list.
-2. Set `CRON_SECRET` in Vercel. `frontend/vercel.json` schedules a daily pull. For hourly pulls, use the optional `pg_cron` block at the end of `07_news_ingestion.sql`.
-3. Admins can pull immediately with **Refresh feeds** on the News & Updates page.
+1. Run `07_news_ingestion.sql`, then `08_news_schedule.sql`, in the Supabase SQL Editor. Together they:
+   - create `news_sources` and seed the feed list;
+   - switch on `pg_cron` and `pg_net`;
+   - store a randomly generated cron secret in Supabase Vault;
+   - schedule an hourly pull at 7 minutes past each hour.
+2. Once the app is deployed, connect the hourly job to it:
+   - Set its address: `UPDATE public.system_settings SET value = 'https://<your-app-domain>' WHERE key = 'news_ingest_url';`
+   - Copy the generated secret into the app's `CRON_SECRET` environment variable. Read it with `SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'epdh_cron_secret';`.
+
+   Until the address is set, the hourly job runs but does nothing.
+3. Any signed-in user can pull immediately: **Refresh feeds** on News & Updates, or the refresh icon on the Overview's "Latest news" tile. Only one manual pull runs per 5 minutes across everyone.
 4. Add, remove or pause feeds in the `news_sources` table. Use `filter_by_keywords = true` for general news sites, so only electricity stories are kept.
+5. `frontend/vercel.json` also schedules a daily pull as a backup when hosted on Vercel. It's harmless to keep, and safe to delete.
 
 ### 4. Running the Application
 Start the Next.js development server:

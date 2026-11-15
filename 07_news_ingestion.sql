@@ -8,7 +8,7 @@
 --   3. unique url          – so the same article is never stored twice
 --   4. RLS for news_sources
 --   5. Seed feeds (local + foreign), verified reachable on 2026-11-15
---   6. OPTIONAL hourly schedule via pg_cron + pg_net
+--   6. Hourly schedule lives in 08_news_schedule.sql
 -- ============================================================
 
 -- ============================================================
@@ -111,23 +111,6 @@ INSERT INTO public.news_sources (name, feed_url, region, filter_by_keywords, is_
 ON CONFLICT (feed_url) DO NOTHING;
 
 -- ============================================================
--- 6. OPTIONAL: run the ingester every hour from the database.
--- Vercel's Hobby plan only allows a daily cron, so use this for
--- hourly updates. Requires the pg_cron and pg_net extensions
--- (Dashboard → Database → Extensions). Replace both placeholders,
--- then run this block on its own.
---
--- SELECT cron.schedule(
---   'epdh-ingest-news-hourly',
---   '7 * * * *',
---   $$
---   SELECT net.http_post(
---     url     := 'https://<your-app-domain>/api/news/ingest',
---     headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>'),
---     timeout_milliseconds := 55000
---   );
---   $$
--- );
---
--- To stop it:  SELECT cron.unschedule('epdh-ingest-news-hourly');
+-- 6. Hourly schedule: see 08_news_schedule.sql (pg_cron + pg_net,
+--    secret kept in Supabase Vault).
 -- ============================================================

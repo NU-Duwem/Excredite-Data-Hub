@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createClient } from '@/utils/supabase/client';
+import { requestFeedRefresh, type RefreshOutcome } from '@/utils/news/refreshClient';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -226,6 +227,24 @@ export default function OverviewPage() {
   const [data, setData] = useState<OverviewData>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [question, setQuestion] = useState('');
+  const [refreshingNews, setRefreshingNews] = useState(false);
+  const [newsNote, setNewsNote] = useState<RefreshOutcome | null>(null);
+
+  const refreshNews = async () => {
+    setRefreshingNews(true);
+    setNewsNote(null);
+    const outcome = await requestFeedRefresh();
+    setNewsNote(outcome);
+    if (outcome.kind === 'ok') {
+      const { data: latest } = await supabase
+        .from('news_articles')
+        .select('id, title, source, url, published_at')
+        .order('published_at', { ascending: false, nullsFirst: false })
+        .limit(2);
+      if (latest) setData((d) => ({ ...d, news: latest as NewsItem[] }));
+    }
+    setRefreshingNews(false);
+  };
 
   useEffect(() => {
     let active = true;
@@ -436,7 +455,28 @@ export default function OverviewPage() {
           </Tile>
 
           {/* News */}
-          <Tile title="Latest news">
+          <Tile
+            title="Latest news"
+            action={
+              <button
+                type="button"
+                onClick={refreshNews}
+                disabled={refreshingNews}
+                aria-label="Refresh news feeds"
+                title="Refresh news feeds"
+                className="-my-2 -mr-2 h-11 w-11 flex items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 hover:text-brand transition-colors disabled:opacity-60"
+              >
+                <svg className={`h-4 w-4 ${refreshingNews ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            }
+          >
+            {newsNote && (
+              <p role="status" className={`text-xs rounded-lg px-2.5 py-1.5 ${newsNote.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-accent-soft text-accent-ink'}`}>
+                {newsNote.message}
+              </p>
+            )}
             {loading ? (
               <Skeleton className="h-24" />
             ) : data.news.length ? (

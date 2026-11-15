@@ -34,3 +34,12 @@ This applies in every environment: VS Code, the CLI, Claude Code on the web and 
   - any manual steps the team must take, such as SQL to run or environment variables to set;
   - how it was tested.
 - **When a PR merges, update its entry** from "Open" to "Merged".
+
+## Database conventions
+
+- **Role checks:** RLS policies and functions must call `private.get_user_role()`. `public.get_user_role()` was moved by `09_security_hardening.sql` and no longer exists. Never recreate it in `public`, because that exposes it through the REST API.
+- **New `SECURITY DEFINER` functions:**
+  - set `search_path = ''`;
+  - schema-qualify every name inside them;
+  - revoke `EXECUTE` from `PUBLIC`, `anon` and `authenticated`, unless signed-in users genuinely need to call them.
+- **After any schema change:** run the Supabase security advisor, and fix new findings before finishing.

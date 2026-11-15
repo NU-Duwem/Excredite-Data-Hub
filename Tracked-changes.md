@@ -16,6 +16,36 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-16 · Database security hardening (Supabase advisor findings)
+**Branch:** `dev` · **PR:** pending · **Status:** Open
+
+**What and why:** Fixed every security warning the Supabase advisor reported that SQL can fix: 22 in all, none caused by the news work. Applied to the live Supabase project with the owner's approval, and saved as `09_security_hardening.sql`.
+
+| Finding | Fix |
+|---|---|
+| `get_user_role()` callable by anyone at `/rest/v1/rpc/get_user_role`, with no fixed `search_path` | Moved to a new `private` schema that the API doesn't expose, with `search_path` fixed. Signed-in users keep `EXECUTE`, because all 34 access policies call it, and those policies kept working unchanged. Anonymous users can no longer reach it. |
+| `handle_new_user()` (signup trigger) callable through the API, with no fixed `search_path` | `EXECUTE` revoked from `PUBLIC`, `anon` and `authenticated`, and `search_path` fixed. The trigger still fires: Postgres doesn't check `EXECUTE` when firing a trigger, which was confirmed with a test inside a rolled-back transaction. |
+| `rls_auto_enable()` (Supabase event trigger that turns on RLS for new tables) callable through the API | `EXECUTE` revoked. |
+| 16 partition tables (`generation_output_*`, `gas_supply_*`, `transmission_data_*`, `distribution_performance_*`) had RLS on but no policies | Each partition now has its parent's policies: any signed-in user can read, and admin, app and ingestion roles can insert. Signed-in users can now read a partition directly, but it's the same data they already see through the parent table. |
+| `pg_trgm` extension in the `public` schema | Moved to `extensions`. No indexes or app code use it, and `extensions` is on the default search path. |
+
+**Not fixable in SQL:** leaked-password protection is a dashboard setting, and requires a paid Supabase plan.
+
+**Files:**
+- `09_security_hardening.sql` (new)
+- `README.md` (full SQL run order and the dashboard step)
+- `CLAUDE.md` (new database conventions: use `private.get_user_role()`, rules for new `SECURITY DEFINER` functions, run the advisor after schema changes)
+
+**Manual steps:** in the Supabase dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**.
+
+**Tested:**
+- Before and after the change, simulated a signed-in admin, a signed-in non-admin and an anonymous visitor inside rolled-back transactions. Admin and non-admin saw identical counts on every table both times: profiles, plants, 87,763 generation rows, feeds, documents, matters and settings.
+- After the change, anonymous users are refused the `private` schema.
+- The trigger test confirmed a trigger fires after `EXECUTE` is revoked, and left nothing behind.
+- The security advisor now reports only leaked-password protection, down from 22 warnings.
+
+---
+
 ## 2026-11-15 · Hourly news schedule switched on; refresh for every user
 **Branch:** `dev` · **PR:** pending · **Status:** Open
 

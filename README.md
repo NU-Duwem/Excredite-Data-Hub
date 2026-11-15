@@ -38,6 +38,10 @@ To set up the database schema and RLS policies, execute the SQL files in your Su
 1. `schema.sql` - Provisions the core tables (organizations, plants, telemetry, matters).
 2. `01_supabase_backend_setup.sql` - Configures `user_profiles`, database triggers, and all Row Level Security (RLS) policies.
 3. `02_seed_data.sql` - Seeds initial Nigerian power sector data (States, GENCOs, DISCOs, TCN).
+4. `03_epdh_updates.sql` to `06_document_embeddings_setup.sql` - Settings, activity log, news, matters and document embeddings.
+5. `07_news_ingestion.sql` and `08_news_schedule.sql` - RSS news feeds and the hourly pull (see step 5 below).
+6. `09_security_hardening.sql` - Fixes the Supabase security advisor findings. After this, new SQL must call `private.get_user_role()`; `public.get_user_role()` no longer exists.
+7. In the dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**. This is not available in SQL, and needs a paid Supabase plan.
 
 ### 2. Frontend Setup
 Navigate to the frontend directory:

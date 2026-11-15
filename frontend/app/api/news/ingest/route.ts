@@ -1,8 +1,8 @@
-import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/utils/supabase/server';
 import { ingestAllSources } from '@/utils/news/ingest';
+import { hasCronSecret } from '@/utils/news/auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -15,15 +15,6 @@ export const maxDuration = 60;
  *      Authorization: Bearer <CRON_SECRET>
  *  - A signed-in power_admin (the "Refresh feeds" button on /news).
  */
-function hasCronSecret(req: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  const header = req.headers.get('authorization') ?? '';
-  if (!secret || !header.startsWith('Bearer ')) return false;
-  const given = Buffer.from(header.slice(7));
-  const expected = Buffer.from(secret);
-  return given.length === expected.length && timingSafeEqual(given, expected);
-}
-
 async function isAdminSession(): Promise<boolean> {
   const supabase = await createServerClient();
   const {
@@ -35,7 +26,7 @@ async function isAdminSession(): Promise<boolean> {
 }
 
 async function handle(req: Request) {
-  if (!hasCronSecret(req) && !(await isAdminSession())) {
+  if (!hasCronSecret(req.headers.get('authorization'), process.env.CRON_SECRET) && !(await isAdminSession())) {
     return NextResponse.json({ error: 'Not authorised' }, { status: 401 });
   }
 

@@ -61,6 +61,12 @@ GEMINI_API_KEY=your_gemini_key                      # and/or ANTHROPIC_API_KEY
 CRON_SECRET=a_long_random_string                    # protects /api/news/ingest
 ```
 
+### Running the tests
+```bash
+cd frontend
+npm test
+```
+
 ### 5. News ingestion (RSS)
 1. Run `07_news_ingestion.sql` in the Supabase SQL Editor. It creates `news_sources` and seeds the feed list.
 2. Set `CRON_SECRET` in Vercel. `frontend/vercel.json` schedules a daily pull. For hourly pulls, use the optional `pg_cron` block at the end of `07_news_ingestion.sql`.

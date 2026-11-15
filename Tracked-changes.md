@@ -16,6 +16,62 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-15 · Edge-case tests for RSS news pulling, and the fixes they led to
+**Branch:** `dev` · **PR:** pending · **Status:** Open
+
+**What and why:** Added the project's first automated test suite: 87 tests covering the RSS parser, the electricity filter, the ingester and the cron-secret check. Writing them turned up 11 real problems, which are now fixed.
+
+**Parser (`rss.ts`):**
+1. **Relative links:** links like `/news/a` caused the article to be dropped. They're now resolved against the feed's address, and images the same way.
+2. **Null bytes:** a NUL byte in any item made PostgreSQL reject that feed's *whole* batch. Control characters are now stripped.
+3. **Cut-off emoji:** truncating a title or summary could split an emoji into half a character, which the database also rejects. Truncation now counts whole characters.
+4. **Future dates:** items dated in the future (publisher time-zone mistakes) would have stayed pinned at the top of the page. Dates more than 10 minutes ahead are now clamped to the current time.
+5. **Double-encoded characters:** titles showed text like `&amp;`. Entities are now decoded twice.
+6. **Tracking tags:** `utm_*`, `fbclid` and `#fragment` made the same article look like a different URL, so it was stored twice. They're now stripped before de-duplication.
+7. **Stray spaces:** removing HTML tags left gaps such as "restored ." These are now tidied.
+
+**Filter (`relevance.ts`):**
+8. Numbers written straight against units ("500MW", "4,000MWh", "330kV", "15,000 MVA") weren't recognised, so relevant stories were dropped. Fixed, and "MVA" and "kV" added as keywords.
+
+**Ingester (`ingest.ts`):**
+9. **Time limit:** 16 feeds, five at a time, with 15 s each could reach the route's 60 s limit and be killed part-way. The run now has a 50 s budget: per-feed timeouts shrink as time runs out, and feeds it can't reach are reported as "Skipped".
+10. **Size limit:** the 5 MB limit was checked only after the whole feed was in memory. It now stops reading as soon as the limit is passed, or before downloading if `Content-Length` is already too big.
+11. **Text encoding:** feeds in ISO-8859-1 or Windows-1252 came out garbled. The encoding is now read from the `Content-Type` header or the XML declaration.
+
+Also: database writes now go in batches of 100 rows. The cron-secret check moved into `utils/news/auth.ts` so it can be tested; its behaviour is unchanged.
+
+**Already handled, now covered by tests:**
+- an entity-expansion attack ("billion laughs");
+- external-entity tricks (XXE);
+- truncated XML;
+- bot-check HTML pages served as 200;
+- `javascript:` and `data:` links;
+- Atom `rel="self"` links;
+- single-item and empty feeds;
+- byte-order marks;
+- HTTP errors, DNS failures and timeouts, each isolated to one feed;
+- a re-run inserting nothing new;
+- the cron secret: unset, empty, wrong, a prefix of the right value, wrong case.
+
+**Files:**
+- `frontend/utils/news/rss.ts`, `relevance.ts`, `ingest.ts`
+- `frontend/utils/news/auth.ts` (new)
+- `frontend/app/api/news/ingest/route.ts`
+- `frontend/utils/news/__tests__/*.test.ts` (new, 4 files)
+- `frontend/vitest.config.ts` (new)
+- `frontend/package.json` (adds `vitest` and an `npm test` script) and `package-lock.json`
+- `README.md`
+
+**Manual steps:** none. Run the tests with `npm test` in `frontend/`.
+
+**Tested:**
+- 87 out of 87 tests pass.
+- The same tests run against the code from before the fixes fail 14 times, so they do catch these bugs.
+- Live run against 6 real feeds: Energy-Storage.news wrote 106 articles in two batches, a broken feed was isolated, and a second run inserted 0.
+- Lint is clean and the production build passes.
+
+---
+
 ## 2026-11-15 · Automatic electricity news from RSS feeds
 **Branch:** `dev` · **PR:** pending · **Status:** Open
 

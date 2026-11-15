@@ -14,7 +14,7 @@ const KEYWORDS = [
   'power plants', 'power station', 'power stations', 'power project', 'power grid', 'national grid',
   'grid collapse', 'grid disturbance', 'grid', 'blackout', 'blackouts', 'power outage', 'power outages',
   'electricity outage', 'load shedding',
-  'megawatt', 'megawatts', 'gigawatt', 'gigawatts', 'kilowatt', 'kwh', 'mwh', 'gwh', 'mw', 'gw',
+  'megawatt', 'megawatts', 'gigawatt', 'gigawatts', 'kilowatt', 'kwh', 'mwh', 'gwh', 'mw', 'gw', 'mva', 'kv',
   'transmission line', 'transmission lines', 'substation', 'substations', 'transformer', 'transformers',
   'metering', 'prepaid meter', 'prepaid meters', 'smart meter', 'smart meters', 'estimated billing',
   'band a', 'electricity tariff', 'electricity tariffs', 'tariff order', 'myto', 'energy transition', 'renewable energy',
@@ -33,6 +33,10 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const PATTERN = new RegExp(`\\b(?:${[...KEYWORDS].sort((a, b) => b.length - a.length).map(escape).join('|')})\\b`, 'i');
 
+/** Quantities written straight against a unit: "500MW", "4,000MWh", "1.2GW", "330kV". */
+const QUANTITY = /\d(?:[\d,.]*\d)?\s?(?:mw|mwh|gw|gwh|kw|kwh|mva|kv)\b/i;
+
 export function isElectricityRelated(title: string, summary: string | null): boolean {
-  return PATTERN.test(`${title} ${summary ?? ''}`);
+  const text = `${title} ${summary ?? ''}`;
+  return PATTERN.test(text) || QUANTITY.test(text);
 }

@@ -10,6 +10,13 @@ import { getRoleDisplayName } from '@/utils/roles';
 
 const navItems = [
   {
+    href: '/',
+    label: 'Overview',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h5a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm9 0a1 1 0 011-1h5a1 1 0 011 1v2a1 1 0 01-1 1h-5a1 1 0 01-1-1V5zm0 7a1 1 0 011-1h5a1 1 0 011 1v7a1 1 0 01-1 1h-5a1 1 0 01-1-1v-7zm-9 3a1 1 0 011-1h5a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4z" />
+    ),
+  },
+  {
     href: '/query',
     label: 'AI Query Interface',
     icon: (
@@ -74,6 +81,9 @@ const navItems = [
     ),
   },
 ];
+
+// Pre-login screens render full-bleed, without the navigation tile.
+const AUTH_ROUTES = ['/login', '/signup', '/forgot-password', '/reset-password'];
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -170,36 +180,36 @@ export default function Sidebar() {
     router.refresh();
   };
 
-  if (pathname === '/login') {
+  if (AUTH_ROUTES.includes(pathname)) {
     return null;
   }
 
+
   return (
     <aside
-      className={`${collapsed ? 'w-16' : 'w-52'} bg-white border-r border-gray-200 hidden md:flex flex-col h-full shrink-0 transition-all duration-300 ease-in-out`}
+      className={`${collapsed ? 'w-[76px]' : 'w-64'} bg-surface rounded-2xl hidden md:flex flex-col h-full shrink-0 transition-all duration-300 ease-in-out shadow-[0_1px_2px_rgba(10,58,34,0.06)]`}
     >
-      {/* Header with logo + brand */}
-      <div className={`${collapsed ? 'h-20' : 'h-32'} flex flex-col items-center justify-center gap-1 px-2 border-b border-gray-200 text-center relative transition-all duration-300`}>
-        <Image
-          src="/Excredite_logo.png"
-          alt="Excredite Electricity Data Hub logo"
-          width={collapsed ? 36 : 88}
-          height={collapsed ? 36 : 88}
-          className="object-contain shrink-0 transition-all duration-300"
-          style={{ height: 'auto' }}
-          priority
-        />
-        {!collapsed && (
-          <span className="max-w-40 text-xs font-bold leading-tight text-gray-900 tracking-tight uppercase">
-            Electricity Data Hub
-          </span>
-        )}
+      {/* Brand */}
+      <div className={`flex items-center ${collapsed ? 'justify-center px-2 pt-5 pb-3' : 'justify-between px-5 pt-5 pb-3'} gap-2`}>
+        <Link href="/" className="flex flex-col min-w-0" aria-label="Excredite Electricity Data Hub — Overview">
+          {collapsed ? (
+            <Image src="/excredite-mark.png" alt="" width={40} height={40} className="h-10 w-10" priority />
+          ) : (
+            <Image src="/excredite-wordmark.png" alt="" width={140} height={27} className="h-auto w-[140px]" priority />
+          )}
+          {!collapsed && (
+            <span className="mt-1.5 text-[11px] font-semibold text-gray-600 tracking-wide">
+              Electricity Data Hub
+            </span>
+          )}
+        </Link>
       </div>
 
-      {/* Collapse toggle button */}
+      {/* Collapse toggle */}
       <button
         onClick={toggleCollapsed}
-        className="mx-auto my-2 p-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+        className={`${collapsed ? 'mx-auto' : 'ml-auto mr-4'} mb-2 h-9 w-9 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors text-gray-500 hover:text-gray-900`}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         <svg
@@ -207,49 +217,56 @@ export default function Sidebar() {
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
+          aria-hidden="true"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
         </svg>
       </button>
-      
-      <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
+
+      <nav aria-label="Main" className="flex-1 px-3 space-y-0.5 overflow-y-auto">
         {navItems
           .filter((item) => item.href !== '/admin' || userRole === 'power_admin')
           .map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const isActive =
+              item.href === '/'
+                ? pathname === '/'
+                : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 title={collapsed ? item.label : undefined}
-                className={`group relative flex items-center justify-between ${collapsed ? 'px-2 py-2 justify-center' : 'px-3 py-2'} text-sm font-medium rounded-md transition-all duration-200 ${
+                aria-current={isActive ? 'page' : undefined}
+                className={`group relative flex items-center justify-between ${collapsed ? 'px-0 justify-center' : 'px-3'} min-h-11 text-sm rounded-xl transition-colors duration-200 ${
                   isActive
-                    ? 'text-brand bg-brand/5 font-bold'
-                    : 'text-gray-500 hover:bg-slate-50 hover:text-gray-900'
+                    ? 'bg-brand text-white font-semibold'
+                    : 'text-gray-700 font-medium hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
-                {/* Active indicator bar */}
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-brand rounded-r-full" />
-                )}
-                <div className="flex items-center">
+                <div className="flex items-center min-w-0">
                   <svg
                     className={`shrink-0 h-5 w-5 ${collapsed ? '' : 'mr-3'} transition-colors duration-200 ${
-                      isActive ? 'text-brand' : 'text-gray-400 group-hover:text-brand'
+                      isActive ? 'text-accent' : 'text-gray-500 group-hover:text-brand'
                     }`}
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
+                    aria-hidden="true"
                   >
                     {item.icon}
                   </svg>
-                  {!collapsed && item.label}
+                  {!collapsed && <span className="truncate">{item.label}</span>}
                 </div>
-                
+
                 {item.badge && alertCount > 0 && (
-                  <span className={`inline-flex items-center justify-center ${collapsed ? 'absolute top-0.5 right-0.5' : 'px-2 py-0.5 ml-2'} text-[10px] font-bold leading-none text-white bg-red-600 rounded-full ${collapsed ? 'h-4 w-4' : ''}`}>
+                  <span
+                    aria-label={`${alertCount} open alerts`}
+                    className={`inline-flex items-center justify-center font-bold leading-none bg-accent text-brand rounded-full ${
+                      collapsed ? 'absolute top-1.5 right-2 h-2.5 w-2.5' : 'px-2 py-1 ml-2 text-[11px]'
+                    }`}
+                  >
                     {collapsed ? '' : alertCount}
                   </span>
                 )}
@@ -257,39 +274,36 @@ export default function Sidebar() {
             );
           })}
       </nav>
-      
-      <div className={`flex-shrink-0 flex flex-col border-t border-gray-200 ${collapsed ? 'p-2' : 'p-4'} gap-4`}>
-        {collapsed ? (
-          /* Collapsed: just avatar */
-          <div className="flex items-center justify-center">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-white text-sm font-bold shadow-sm leading-none" title={`${userName} (${getRoleDisplayName(userRole)})`}>
-              {userInitials}
-            </div>
+
+      {/* Account */}
+      <div className={`flex-shrink-0 flex flex-col ${collapsed ? 'p-2' : 'p-3'} gap-2`}>
+        <div
+          className={`flex items-center ${collapsed ? 'justify-center p-1' : 'p-2.5'} rounded-xl bg-gray-100`}
+          title={collapsed ? `${userName} (${getRoleDisplayName(userRole)})` : undefined}
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-brand text-sm font-bold leading-none">
+            {userInitials}
           </div>
-        ) : (
-          /* Expanded: avatar + name */
-          <div className="flex items-center">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-white text-sm font-bold shadow-sm leading-none">
-              {userInitials}
-            </div>
+          {!collapsed && (
             <div className="ml-3 overflow-hidden">
               <p className="text-sm font-semibold text-gray-900 truncate">{userName}</p>
-              <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+              <p className="text-[11px] font-medium text-gray-600 truncate">
                 {getRoleDisplayName(userRole)}
               </p>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <button
           onClick={handleLogout}
-          className={`flex items-center ${collapsed ? 'justify-center px-2' : 'px-3'} py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-md transition-colors w-full border border-red-100`}
-          title={collapsed ? 'Logout' : undefined}
+          className={`flex items-center ${collapsed ? 'justify-center px-2' : 'px-3'} min-h-10 text-sm font-semibold text-red-700 hover:bg-red-50 rounded-xl transition-colors w-full`}
+          aria-label={collapsed ? 'Log out' : undefined}
+          title={collapsed ? 'Log out' : undefined}
         >
-          <svg className={`${collapsed ? '' : 'mr-3'} h-4 w-4`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className={`${collapsed ? '' : 'mr-3'} h-4 w-4`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
-          {!collapsed && 'LOGOUT'}
+          {!collapsed && 'Log out'}
         </button>
       </div>
     </aside>

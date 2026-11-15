@@ -242,7 +242,7 @@ export default function ProfilePage() {
                   <div className="flex flex-col sm:flex-row gap-3 max-w-md">
                     <button
                       onClick={() => setShowPasswordForm(true)}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-brand text-white rounded-lg text-sm font-bold shadow-md hover:bg-[#a38020] transition-colors"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-brand text-white rounded-lg text-sm font-bold shadow-md hover:bg-brand-hover transition-colors"
                     >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
@@ -325,7 +325,7 @@ export default function ProfilePage() {
                       <button 
                         type="submit"
                         disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword}
-                        className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-[#a38020] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-brand-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {passwordLoading ? 'Processing...' : 'Update Password'}
                       </button>

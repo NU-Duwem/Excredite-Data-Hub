@@ -260,28 +260,28 @@ export default function ForecastsPage() {
                   dataKey="date" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fontSize: 9, fontWeight: 700, fill: '#94a3b8' }}
+                  tick={{ fontSize: 9, fontWeight: 700, fill: '#5f6f66' }}
                   dy={10}
                   interval={horizon === '90' ? 6 : 2}
                 />
                 <YAxis 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fontSize: 9, fontWeight: 700, fill: '#94a3b8' }}
+                  tick={{ fontSize: 9, fontWeight: 700, fill: '#5f6f66' }}
                   dx={-10}
                   unit={getYAxisUnit()}
                 />
                 <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '12px' }}
+                  contentStyle={{ borderRadius: '12px', border: '1px solid #dde4df', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '12px' }}
                   itemStyle={{ fontSize: '12px', fontWeight: 700 }}
-                  labelStyle={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', marginBottom: '4px', textTransform: 'uppercase' }}
+                  labelStyle={{ fontSize: '10px', fontWeight: 800, color: '#5f6f66', marginBottom: '4px', textTransform: 'uppercase' }}
                 />
                 {/* Confidence interval area */}
                 <Area 
                   type="monotone" 
                   dataKey="upper" 
                   stroke="none" 
-                  fill="#b58e23" 
+                  fill="#e89200" 
                   fillOpacity={0.12} 
                   baseLine={"lower" as any}
                   animationDuration={1000}
@@ -298,9 +298,9 @@ export default function ForecastsPage() {
                   type="monotone" 
                   dataKey="historical" 
                   name="Historical"
-                  stroke="#1e293b" 
+                  stroke="#0a3a22" 
                   strokeWidth={3} 
-                  dot={{ r: 3, fill: '#1e293b' }}
+                  dot={{ r: 3, fill: '#0a3a22' }}
                   connectNulls={false}
                 />
 
@@ -309,10 +309,10 @@ export default function ForecastsPage() {
                   type="monotone" 
                   dataKey="forecast" 
                   name="AI Forecast"
-                  stroke="#b58e23" 
+                  stroke="#e89200" 
                   strokeWidth={3} 
                   strokeDasharray="5 5"
-                  dot={{ r: 3, fill: '#b58e23', strokeWidth: 1, stroke: '#fff' }}
+                  dot={{ r: 3, fill: '#e89200', strokeWidth: 1, stroke: '#fff' }}
                   connectNulls={true}
                 />
               </ComposedChart>

@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-16 · AI Query redesigned as a "report thread"
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #9 · **Status:** Open
 
 **What and why:** This is design B, "Report thread", from the AI Query canvas. The page was a plain chat; now each question and its answer form a numbered card (Q1, Q2…), which reads like a briefing and is easier to share.
 

@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-16 · Regulatory & Advisory rebuilt as a work board with tasks
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #10 · **Status:** Open
 
 **What and why:** The section now holds the firm's jobs (current and closed), the tasks on each job with their dates, and who each task is assigned to: one person, or the whole team. This is design C, "Work board", from the Regulatory & Advisory canvas. Before, a job had only a free-text lead and a single deadline, and there were no tasks at all.
 

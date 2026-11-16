@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-16 · Redesigned Profile, History, Admin Panel and Documents; role lockdown
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #8 · **Status:** Open
 
 **What and why:** These are the designs picked from the alternatives canvas. Profile & Settings uses the "Analyst table" design (C). Conversation History, Documents and Admin Panel use "Split view" (A). Anomaly Alerts and Regulatory & Advisory are unchanged. While wiring the pages to real data, several bugs and a serious security hole turned up, and they are fixed here too.
 

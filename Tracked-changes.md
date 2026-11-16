@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-16 · News & Updates redesigned as an "Analyst Feed" (design B)
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #6 · **Status:** Open
 
 **What and why:** The owner picked design B, a dense, filterable timeline, from three concepts on the design canvas. The filter panel is placed to work alongside the existing 256px app sidebar.
 

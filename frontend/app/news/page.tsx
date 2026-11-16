@@ -250,8 +250,8 @@ export default function NewsPage() {
   };
 
   return (
-    <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-      <div className="max-w-[1400px] mx-auto flex flex-col gap-4">
+    <main className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-hidden">
+      <div className="max-w-[1400px] w-full mx-auto flex-1 min-h-0 flex flex-col gap-4">
         {/* Toolbar: the everyday filters */}
         <header className="flex flex-wrap items-center gap-3">
           <h1 className="mr-2 text-2xl font-extrabold tracking-tight text-gray-900">News &amp; Updates</h1>
@@ -349,9 +349,10 @@ export default function NewsPage() {
           </div>
         )}
 
-        <div className="flex gap-4 items-start">
+        {/* Below the toolbar: the news list and the filter rail scroll independently. */}
+        <div className="flex-1 min-h-0 flex gap-4 items-start">
           {/* News list */}
-          <section aria-label="News stories" className="flex-1 min-w-0 flex flex-col gap-4">
+          <section aria-label="News stories" className="scroll-panel relative flex-1 min-w-0 h-full flex flex-col gap-4 pr-1 [&>*]:shrink-0">
             {loading ? (
               <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand" aria-label="Loading" />
@@ -461,7 +462,10 @@ export default function NewsPage() {
           </section>
 
           {/* Filter rail: wide screens only, on the RIGHT so it never sits beside the app sidebar */}
-          <aside aria-label="More filters" className="hidden xl:block w-[260px] shrink-0 bg-white rounded-2xl p-5 sticky top-0">
+          <aside
+            aria-label="More filters"
+            className="scroll-panel relative hidden xl:block w-[260px] shrink-0 max-h-full bg-white rounded-2xl p-5"
+          >
             <h2 className="mb-4 text-sm font-extrabold text-gray-900">Filters</h2>
             <FilterPanel {...panelProps} showTimeRange={false} idPrefix="rail" />
             {unreachable.length > 0 && (
@@ -503,7 +507,7 @@ export default function NewsPage() {
                 </svg>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 pb-4">
+            <div className="scroll-panel flex-1 min-h-0 px-6 pb-4">
               <FilterPanel {...panelProps} showTimeRange idPrefix="drawer" />
             </div>
             <div className="flex gap-3 px-6 py-4 border-t border-gray-100">

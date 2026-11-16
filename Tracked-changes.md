@@ -16,8 +16,36 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-16 · Scrollable filter panel on News & Updates
+**Branch:** `dev` · **PR:** pending · **Status:** Open
+
+**What and why:** On shorter screens the filter rail ran off the bottom of the window. It had no height limit, so the sources list, the last-pull line and Reset filters couldn't be reached. The drawer did scroll, but on macOS its scrollbar was hidden until you scrolled, so it didn't look scrollable.
+
+**Changes:**
+- **Layout:** the toolbar now stays fixed at the top of the page. Below it, the news list and the filter rail each scroll on their own and fill exactly the space left, so the rail never runs off-screen and filters stay in view while you scroll the stories.
+- **New `.scroll-panel` style** in `globals.css`, used on the rail, the list and the drawer body:
+  - a slim grey scrollbar that stays visible;
+  - space reserved for it, so content doesn't shift when it appears;
+  - scrolling at the end of a panel doesn't carry on into the page behind it.
+- **Bug fixes found while testing:**
+  - The day groups in the list were shrinking to fit and clipping stories. They now keep their natural height.
+  - The hidden "opens in a new tab" screen-reader text escaped the scrolling list and made the whole page scrollable. The list now contains it.
+
+**Files:** `frontend/app/news/page.tsx`, `frontend/app/globals.css`, `Tracked-changes.md` (PR #6 entry marked Merged)
+
+**Manual steps:** none.
+
+**Tested:**
+- Checked in Chromium with 16 sources and 30 stories, at three sizes:
+  - **1440×700:** the rail fits on screen (102–660px) and scrolls its 1,082px of content, with Reset filters reachable. The list scrolls 3,129px of stories inside 558px. The page itself doesn't scroll, so the toolbar stays put.
+  - **1024×600:** the drawer body scrolls and its footer buttons stay on screen.
+  - **390×844:** the list scrolls within the screen.
+- 144 out of 144 tests pass, lint is clean and the production build passes.
+
+---
+
 ## 2026-11-16 · News & Updates redesigned as an "Analyst Feed" (design B)
-**Branch:** `dev` · **PR:** #6 · **Status:** Open
+**Branch:** `dev` · **PR:** #6 · **Status:** Merged
 
 **What and why:** The owner picked design B, a dense, filterable timeline, from three concepts on the design canvas. The filter panel is placed to work alongside the existing 256px app sidebar.
 

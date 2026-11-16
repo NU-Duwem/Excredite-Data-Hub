@@ -79,6 +79,31 @@ code, kbd, samp, pre {
   font-family: var(--font-code);
 }
 
+/* Scrollable side panels (e.g. News filters): a slim scrollbar that stays
+   visible, so it is obvious the panel scrolls even on macOS, where system
+   scrollbars hide until you scroll. Space is reserved so content never
+   shifts when the bar appears. */
+.scroll-panel {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-gray-300) transparent;
+}
+.scroll-panel::-webkit-scrollbar {
+  width: 8px;
+}
+.scroll-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-panel::-webkit-scrollbar-thumb {
+  background: var(--color-gray-300);
+  border-radius: 999px;
+}
+.scroll-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gray-400);
+}
+
 /* Responsive Word Document (.docx) Reader Styling - Prevents Text Clipping */
 .docx-wrapper {
   background: transparent !important;

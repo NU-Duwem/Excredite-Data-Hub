@@ -119,10 +119,10 @@ function NativeOfficeViewer({ docUrl, title }: { docUrl: string; title: string }
 
 function DocumentsContent() {
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get('tab') as DocTab) || 'upload';
+  const initialTab = (searchParams.get('tab') as DocTab) || 'view-document';
 
   const [activeTab, setActiveTab] = useState<DocTab>(
-    ['upload', 'view-document', 'document-generator'].includes(initialTab) ? initialTab : 'upload'
+    ['upload', 'view-document', 'document-generator'].includes(initialTab) ? initialTab : 'view-document'
   );
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [filterClass, setFilterClass] = useState('All');
@@ -848,33 +848,43 @@ function DocumentsContent() {
     <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 border-b border-gray-200 gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Document Registry & Workspace</h1>
-            <p className="mt-1 text-sm text-gray-500">Upload, edit, generate documents, and manage all files in one place.</p>
+        <header className="flex flex-wrap items-center gap-3">
+          {activeTab !== 'view-document' && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('view-document')}
+              className="min-h-11 px-3 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-brand hover:bg-gray-50"
+            >
+              ← Library
+            </button>
+          )}
+          <div className="mr-auto">
+            <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">
+              {activeTab === 'upload' ? 'Upload documents' : activeTab === 'document-generator' ? 'Generate a document' : 'Documents'}
+            </h1>
+            {activeTab === 'view-document' && (
+              <p className="text-sm text-gray-600">Regulatory filings, legal documents and AI-generated briefings in one library.</p>
+            )}
           </div>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="border-b border-gray-200">
-          <nav className="flex gap-6">
-            {[
-              { id: 'upload' as DocTab, label: 'Upload' },
-              { id: 'view-document' as DocTab, label: 'View Document' },
-              { id: 'document-generator' as DocTab, label: 'Document Generator' },
-            ].map(tab => (
+          {activeTab === 'view-document' && (
+            <>
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`pb-3 text-sm font-bold border-b-2 transition-colors ${
-                  activeTab === tab.id ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                type="button"
+                onClick={() => setActiveTab('document-generator')}
+                className="min-h-11 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-brand hover:bg-gray-50"
               >
-                {tab.label}
+                Generate document
               </button>
-            ))}
-          </nav>
-        </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('upload')}
+                className="min-h-11 px-4 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-hover"
+              >
+                Upload
+              </button>
+            </>
+          )}
+        </header>
 
         {/* ============================================ */}
         {/* TAB: Upload */}
@@ -1129,10 +1139,10 @@ function DocumentsContent() {
         {/* TAB: View Document */}
         {/* ============================================ */}
         {activeTab === 'view-document' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-5 space-y-6">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[400px]">
-                <div className="p-5 border-b border-gray-100 flex flex-col gap-3.5 bg-gray-50/80">
+          <div className="flex flex-col lg:flex-row gap-4 items-start">
+            <div className="w-full lg:w-[400px] lg:shrink-0">
+              <div className="bg-white rounded-2xl overflow-hidden flex flex-col min-h-[400px] lg:max-h-[calc(100vh-11rem)]">
+                <div className="p-4 border-b border-gray-100 flex flex-col gap-3">
                   <div className="flex justify-between items-center">
                     <label className="flex items-center gap-2.5 cursor-pointer select-none">
                       <input 
@@ -1142,7 +1152,9 @@ function DocumentsContent() {
                         className="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand accent-brand cursor-pointer"
                         title="Select All"
                       />
-                      <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">Document Repository</h2>
+                      <h2 className="text-[11px] font-extrabold tracking-wider uppercase text-gray-600">
+                        {filteredDocs.length} document{filteredDocs.length === 1 ? '' : 's'}
+                      </h2>
                     </label>
                     {isAdmin && (
                       <select 
@@ -1156,12 +1168,14 @@ function DocumentsContent() {
                       </select>
                     )}
                   </div>
+                  <label htmlFor="doc-search" className="sr-only">Search documents</label>
                   <input
-                    type="text"
-                    placeholder="Search by title or document type..."
+                    id="doc-search"
+                    type="search"
+                    placeholder="Search by title or type…"
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
-                    className="rounded-lg border-gray-200 py-2 px-3 text-xs border focus:ring-brand focus:border-brand w-full bg-white shadow-sm font-medium"
+                    className="w-full min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-brand"
                   />
                   {/* Bulk Action Toolbar */}
                   {selectedDocIds.length > 0 && (
@@ -1189,7 +1203,7 @@ function DocumentsContent() {
                     </div>
                   )}
                 </div>
-                <ul role="list" className="divide-y divide-gray-100 flex-1 overflow-y-auto">
+                <ul role="list" className="scroll-panel relative flex-1 p-2 flex flex-col gap-0.5">
                   {docsLoading ? (
                     <li className="p-10 text-center">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand mx-auto"></div>
@@ -1197,91 +1211,125 @@ function DocumentsContent() {
                   ) : filteredDocs.length === 0 ? (
                     <li className="p-10 text-center text-xs text-gray-500 font-medium">No documents found.</li>
                   ) : (
-                    filteredDocs.map((doc) => (
-                      <li 
-                        key={doc.id} 
-                        onClick={() => doc.processing_status === 'COMPLETE' && setSelectedDoc(doc)}
-                        className={`p-4 transition-colors flex justify-between items-start gap-4 ${
-                          doc.processing_status === 'COMPLETE' ? 'hover:bg-gray-50/80 cursor-pointer' : 'opacity-60 grayscale cursor-not-allowed'
-                        } ${selectedDoc?.id === doc.id ? 'bg-brand/5 border-l-4 border-l-brand shadow-sm' : ''} ${selectedDocIds.includes(doc.id) ? 'bg-red-50/40' : ''}`}
+                    filteredDocs.map((doc) => {
+                      const ready = doc.processing_status === 'COMPLETE';
+                      const ext = (doc.s3_key?.split('.').pop() || (doc.source === 'ai_generated' ? 'AI' : 'DOC')).slice(0, 4).toUpperCase();
+                      const badge =
+                        ext === 'PDF' ? 'bg-red-50 text-red-800' :
+                        ext.startsWith('DOC') ? 'bg-blue-50 text-blue-800' :
+                        ext.startsWith('XLS') || ext === 'CSV' ? 'bg-green-50 text-green-800' :
+                        ext.startsWith('PPT') ? 'bg-accent-soft text-accent-ink' : 'bg-gray-100 text-gray-700';
+                      const active = selectedDoc?.id === doc.id;
+                      return (
+                      <li
+                        key={doc.id}
+                        onClick={() => ready && setSelectedDoc(doc)}
+                        className={`rounded-xl p-3 flex items-start gap-3 transition-colors ${
+                          ready ? 'cursor-pointer hover:bg-gray-50' : 'cursor-not-allowed'
+                        } ${active ? 'bg-brand/10 hover:bg-brand/10' : ''} ${selectedDocIds.includes(doc.id) ? 'ring-1 ring-red-200 bg-red-50/40' : ''}`}
                       >
-                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <input
-                            type="checkbox"
-                            checked={selectedDocIds.includes(doc.id)}
-                            onClick={(e) => toggleSelectDoc(e, doc.id)}
-                            onChange={() => {}}
-                            className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-brand focus:ring-brand accent-brand cursor-pointer"
-                          />
-                          <div className="flex flex-col min-w-0 flex-1">
-                            <span className="text-sm font-bold text-gray-900 leading-snug break-words">{doc.title}</span>
-                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-gray-100 text-gray-600 border border-gray-200/60">
-                                {doc.document_type.replace(/_/g, ' ')}
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${doc.title}`}
+                          checked={selectedDocIds.includes(doc.id)}
+                          onClick={(e) => toggleSelectDoc(e, doc.id)}
+                          onChange={() => {}}
+                          className="mt-3 h-4 w-4 shrink-0 rounded accent-brand cursor-pointer"
+                        />
+                        <span aria-hidden="true" className={`h-11 w-10 shrink-0 rounded-lg flex items-center justify-center text-[10px] font-extrabold ${badge}`}>
+                          {ext}
+                        </span>
+                        <div className="flex flex-col min-w-0 flex-1 gap-1">
+                          {ready ? (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setSelectedDoc(doc); }}
+                              aria-current={active ? 'true' : undefined}
+                              className={`text-left text-sm leading-snug break-words ${active ? 'font-bold text-brand' : 'font-semibold text-gray-900'}`}
+                            >
+                              {doc.title}
+                            </button>
+                          ) : (
+                            <span className="text-sm font-semibold text-gray-600 leading-snug break-words">{doc.title}</span>
+                          )}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">
+                              {doc.document_type.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}
+                            </span>
+                            {/* Classification visible to admin only */}
+                            {isAdmin && (
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                doc.classification === 'PUBLIC' ? 'bg-brand/10 text-brand' :
+                                doc.classification === 'LEGAL_PRIVILEGED' ? 'bg-red-50 text-red-800' : 'bg-gray-100 text-gray-700'
+                              }`}>
+                                {doc.classification === 'LEGAL_PRIVILEGED' ? 'Legal privileged' : doc.classification === 'PUBLIC' ? 'Public' : 'Internal'}
                               </span>
-                              <span className="text-gray-300">•</span>
-                              <span className="text-[10px] font-medium text-gray-500">{new Date(doc.created_at).toLocaleDateString()}</span>
-                            </div>
+                            )}
+                            {!ready && (
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                doc.processing_status === 'FAILED' ? 'bg-red-50 text-red-800' : 'bg-accent-soft text-accent-ink'
+                              }`}>
+                                {doc.processing_status === 'FAILED' ? 'Processing failed' : 'Processing…'}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-gray-600">{new Date(doc.created_at).toLocaleDateString('en-GB')}</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                          {/* Classification visible to admin only */}
-                          {isAdmin && (
-                            <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide border ${
-                              doc.classification === 'PUBLIC' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' : 'bg-amber-50 text-amber-800 border-amber-200/80'
-                            }`}>
-                              {doc.classification}
-                            </span>
-                          )}
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border ${
-                            doc.processing_status === 'COMPLETE' 
-                              ? 'bg-amber-50 text-amber-700 border-amber-200/80' 
-                              : 'bg-gray-100 text-gray-500 border-gray-200'
-                          }`}>
-                            {doc.processing_status}
-                          </span>
-                          <button
-                            onClick={(e) => openDeleteModal(e, doc)}
-                            title="Delete Document"
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all border border-transparent hover:border-red-100"
-                          >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => openDeleteModal(e, doc)}
+                          aria-label={`Delete ${doc.title}`}
+                          title="Delete document"
+                          className="shrink-0 h-9 w-9 flex items-center justify-center text-gray-500 hover:text-red-700 hover:bg-red-50 rounded-lg"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </li>
-                    ))
+                      );
+                    })
                   )}
                 </ul>
               </div>
             </div>
 
-            <div className="lg:col-span-7 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col min-h-[600px] overflow-hidden">
+            <div className="flex-1 min-w-0 w-full bg-white rounded-2xl flex flex-col min-h-[600px] overflow-hidden">
               {selectedDoc ? (
                 <>
-                  <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Document Workspace</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">Viewing: <span className="font-semibold text-brand">{selectedDoc.title}</span></p>
+                  <div className="px-6 py-5 border-b border-gray-100 flex flex-wrap justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-extrabold text-gray-900 leading-snug break-words">{selectedDoc.title}</h2>
+                      <p className="text-sm text-gray-600 mt-0.5">
+                        {selectedDoc.document_type.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}
+                        {' · '}{formatFileSize(selectedDoc.file_size_bytes)}
+                        {' · added '}{new Date(selectedDoc.created_at).toLocaleDateString('en-GB')}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
+                        type="button"
                         onClick={() => { setShareDocTitle(selectedDoc.title); setShareDocId(selectedDoc.id); setShowShareModal(true); }}
-                        className="px-3 py-1.5 text-[10px] font-bold text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors uppercase"
+                        className="min-h-10 px-3.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-brand hover:bg-gray-50"
                       >
                         Share
                       </button>
                       <button
+                        type="button"
                         onClick={() => { setIsEditing(!isEditing); if (!isEditing) setEditContent(selectedDoc.notes || ''); }}
-                        className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors uppercase ${
-                          isEditing ? 'bg-brand text-white' : 'text-gray-700 border border-gray-200 hover:bg-gray-100'
+                        className={`min-h-10 px-3.5 rounded-xl text-sm font-semibold ${
+                          isEditing ? 'bg-brand text-white' : 'border border-gray-200 bg-white text-brand hover:bg-gray-50'
                         }`}
                       >
-                        {isEditing ? 'Exit Editor' : 'Edit'}
+                        {isEditing ? 'Exit editor' : 'Edit with AI'}
                       </button>
-                      <button onClick={() => setSelectedDoc(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDoc(null)}
+                        aria-label="Close document"
+                        className="h-10 w-10 flex items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100"
+                      >
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                       </button>
                     </div>
                   </div>

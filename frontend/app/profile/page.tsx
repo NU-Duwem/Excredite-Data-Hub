@@ -1,420 +1,400 @@
 'use client';
 
 import { createClient } from '@/utils/supabase/client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-
+import type { User } from '@supabase/supabase-js';
 import { getRoleDisplayName } from '@/utils/roles';
 
-export default function ProfilePage() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [userName, setUserName] = useState('');
-  const [userEmail, setUserEmail] = useState('');
-  const [userRole, setUserRole] = useState('User');
-  const [isAdmin, setIsAdmin] = useState(false);
+type ActivityRow = { id: string; action: string | null; details: string | null; created_at: string };
+type Status = { kind: 'ok' | 'error' | 'info'; text: string } | null;
 
-  // Password change state
+const SECTIONS = [
+  { id: 'account', label: 'Account' },
+  { id: 'password', label: 'Password' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'activity', label: 'My activity' },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]['id'];
+
+const NOTIFICATION_OPTIONS = [
+  { id: 'n1', label: 'Email anomaly alerts', desc: 'Get notified when grid anomalies are detected.' },
+  { id: 'n2', label: 'Weekly briefing digest', desc: 'A summary of sector performance every Monday.' },
+  { id: 'n3', label: 'Legal matter updates', desc: 'Reminders for upcoming deadlines in your matters.' },
+];
+
+const inputCls =
+  'w-full min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-brand focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600';
+const labelCls = 'flex flex-col gap-1.5 text-xs font-bold text-gray-700';
+
+function StatusLine({ status }: { status: Status }) {
+  if (!status) return null;
+  const cls = status.kind === 'error' ? 'text-red-700' : status.kind === 'ok' ? 'text-green-800' : 'text-gray-600';
+  return (
+    <p role="status" className={`text-sm font-medium ${cls}`}>
+      {status.text}
+    </p>
+  );
+}
+
+function formatWhen(iso: string) {
+  const d = new Date(iso);
+  const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** A settings section: description on the left, controls on the right (stacks on narrow screens). */
+function Section({ id, title, desc, children }: { id: SectionId; title: string; desc: string; children: React.ReactNode }) {
+  return (
+    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-4 bg-white rounded-2xl p-6 grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div>
+        <h2 id={`${id}-title`} className="text-base font-extrabold text-gray-900">
+          {title}
+        </h2>
+        <p className="mt-1 text-sm text-gray-600">{desc}</p>
+      </div>
+      <div className="md:col-span-2 min-w-0">{children}</div>
+    </section>
+  );
+}
+
+export default function ProfilePage() {
+  const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+  const scrollRef = useRef<HTMLElement>(null);
+
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState('power_team');
+  const isAdmin = role === 'power_admin';
+
+  // Account
+  const [savedName, setSavedName] = useState('');
+  const [nameDraft, setNameDraft] = useState('');
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameStatus, setNameStatus] = useState<Status>(null);
+
+  // Password
+  const [isForceReset, setIsForceReset] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [updateStatus, setUpdateStatus] = useState('');
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [isForceReset, setIsForceReset] = useState(false);
-  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordStatus, setPasswordStatus] = useState<Status>(null);
 
-  // Activity log state
-  const [activityLog, setActivityLog] = useState<any[]>([]);
-  const [activityLoading, setActivityLoading] = useState(false);
+  // Activity
+  const [activity, setActivity] = useState<ActivityRow[]>([]);
 
-  const supabase = createClient();
-  const router = useRouter();
+  // "On this page" index
+  const [activeSection, setActiveSection] = useState<SectionId>('account');
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('force_reset') === 'true') {
-        setIsForceReset(true);
-      }
-    }
-  }, []);
+    let active = true;
+    const forceReset = new URLSearchParams(window.location.search).get('force_reset') === 'true';
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUser(user);
-        setUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'User');
-        setUserEmail(user.email || '');
-
-        // Fetch role from DB
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        const role = profile?.role || user.user_metadata?.role || 'power_analyst';
-        setUserRole(role);
-        setIsAdmin(role === 'power_admin');
-
-        // Fetch own activity log
-        setActivityLoading(true);
-        const { data: logs } = await supabase
-          .from('user_activity_log')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(20);
-        setActivityLog(logs || []);
-        setActivityLoading(false);
-      } else {
+    (async () => {
+      const {
+        data: { user: u },
+      } = await supabase.auth.getUser();
+      if (!active) return;
+      if (!u) {
         router.push('/login');
+        return;
       }
+      const [{ data: profile }, { data: logs }] = await Promise.all([
+        supabase.from('user_profiles').select('role, full_name').eq('id', u.id).single(),
+        supabase
+          .from('user_activity_log')
+          .select('id, action, details, created_at')
+          .eq('user_id', u.id)
+          .order('created_at', { ascending: false })
+          .limit(20),
+      ]);
+      if (!active) return;
+      const name = (profile?.full_name || u.user_metadata?.full_name || u.email?.split('@')[0] || '').trim();
+      setUser(u);
+      setRole(profile?.role || 'power_team');
+      setSavedName(name);
+      setNameDraft(name);
+      setActivity((logs ?? []) as ActivityRow[]);
+      setIsForceReset(forceReset);
       setLoading(false);
+      if (forceReset) {
+        setActiveSection('password');
+        window.setTimeout(() => document.getElementById('password')?.scrollIntoView({ block: 'start' }), 0);
+      }
+    })();
+    return () => {
+      active = false;
     };
-    fetchUser();
   }, [supabase, router]);
+
+  // Highlight the section currently in view.
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (loading || !root) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActiveSection(visible[0].target.id as SectionId);
+      },
+      { root, rootMargin: '0px 0px -60% 0px', threshold: 0 },
+    );
+    SECTIONS.forEach((s) => {
+      const el = document.getElementById(s.id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [loading]);
+
+  const logActivity = (action: string, details: string) =>
+    user ? supabase.from('user_activity_log').insert({ user_id: user.id, action, details }) : Promise.resolve();
+
+  const handleSaveName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = nameDraft.trim();
+    if (!user || !name || name === savedName) return;
+    setNameSaving(true);
+    setNameStatus({ kind: 'info', text: 'Saving…' });
+    const [{ error: profileError }, { error: authError }] = await Promise.all([
+      supabase.from('user_profiles').update({ full_name: name, updated_at: new Date().toISOString() }).eq('id', user.id),
+      supabase.auth.updateUser({ data: { full_name: name } }),
+    ]);
+    if (profileError || authError) {
+      setNameStatus({ kind: 'error', text: `Could not save: ${(profileError || authError)?.message}` });
+    } else {
+      setSavedName(name);
+      setNameStatus({ kind: 'ok', text: 'Name updated.' });
+      await logActivity('PROFILE_UPDATED', 'Changed display name.');
+      router.refresh();
+    }
+    setNameSaving(false);
+  };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setUpdateStatus('');
+    if (!user) return;
+    if (!currentPassword) return setPasswordStatus({ kind: 'error', text: 'Enter your current password.' });
+    if (newPassword.length < 6) return setPasswordStatus({ kind: 'error', text: 'The new password must be at least 6 characters.' });
+    if (newPassword !== confirmPassword) return setPasswordStatus({ kind: 'error', text: 'The new passwords do not match.' });
 
-    // Validation
-    if (!currentPassword) {
-      setUpdateStatus('Error: Please enter your current password.');
-      return;
-    }
-    if (!newPassword || newPassword.length < 6) {
-      setUpdateStatus('Error: New password must be at least 6 characters.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setUpdateStatus('Error: New passwords do not match.');
-      return;
-    }
-    
-    setPasswordLoading(true);
-    setUpdateStatus('Verifying current password...');
-
-    // Step 1: Verify current password by attempting sign in
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: userEmail,
-      password: currentPassword,
-    });
-
+    setPasswordSaving(true);
+    setPasswordStatus({ kind: 'info', text: 'Checking your current password…' });
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: user.email ?? '', password: currentPassword });
     if (signInError) {
-      setUpdateStatus('Error: Current password is incorrect.');
-      setPasswordLoading(false);
+      setPasswordStatus({ kind: 'error', text: 'Your current password is incorrect.' });
+      setPasswordSaving(false);
       return;
     }
 
-    // Step 2: Update to new password and clear the force_password_reset flag in metadata
-    setUpdateStatus('Updating password...');
-    const { error } = await supabase.auth.updateUser({ 
-      password: newPassword,
-      data: { force_password_reset: null }
-    });
-    
+    setPasswordStatus({ kind: 'info', text: 'Updating password…' });
+    const { error } = await supabase.auth.updateUser({ password: newPassword, data: { force_password_reset: null } });
     if (error) {
-      setUpdateStatus('Error: ' + error.message);
+      setPasswordStatus({ kind: 'error', text: error.message });
     } else {
-      setUpdateStatus('Password updated successfully!');
+      setPasswordStatus({ kind: 'ok', text: 'Password updated.' });
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setIsForceReset(false);
-
-      // Log the activity
-      if (user) {
-        await supabase.from('user_activity_log').insert({
-          user_id: user.id,
-          action: 'PASSWORD_CHANGED',
-          details: 'User changed their password.',
-        });
-      }
+      await logActivity('PASSWORD_CHANGED', 'User changed their password.');
     }
-    setPasswordLoading(false);
+    setPasswordSaving(false);
   };
 
-  const handleLogout = async () => {
+  const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push('/login');
   };
 
-  const initials = userName
-    .split(/\s+/)
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
-    .substring(0, 2);
-
-  const formatTimeAgo = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+  const jumpTo = (id: SectionId) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    setActiveSection(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
-      </div>
+      <main className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand" aria-label="Loading" />
+      </main>
     );
   }
 
+  const mismatch = confirmPassword !== '' && confirmPassword !== newPassword;
+
   return (
-    <main className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Account Settings</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage your profile and security preferences.</p>
-        </div>
+    <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6">
+      <div className="max-w-[1200px] mx-auto flex flex-col gap-4">
+        <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Profile &amp; Settings</h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Profile Overview */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center">
-              <div className="mx-auto h-20 w-20 rounded-full bg-brand flex items-center justify-center text-white text-2xl font-bold mb-4 shadow-inner">
-                {initials}
-              </div>
-              <h2 className="text-lg font-bold text-gray-900">{userName}</h2>
-              <p className="text-sm text-gray-500 mb-6">{userEmail}</p>
-              
-              <div className="inline-flex items-center px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-bold uppercase tracking-wider">
-                {getRoleDisplayName(userRole)}
-              </div>
-
-              <div className="mt-8 pt-6 border-t border-gray-100">
-                <button 
-                  onClick={handleLogout}
-                  className="w-full px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 border border-red-100 rounded-lg transition-colors"
-                >
-                  Sign Out
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-              <h3 className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-wider">Session Info</h3>
-              <div className="space-y-3 text-sm">
-                {/* "Joined" date only visible to Admin users */}
-                {isAdmin && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Joined</span>
-                    <span className="text-gray-900 font-medium">{new Date(user?.created_at).toLocaleDateString()}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Auth Method</span>
-                  <span className="text-gray-900 font-medium">Supabase Auth</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Last Sign In</span>
-                  <span className="text-gray-900 font-medium">
-                    {user?.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'N/A'}
-                  </span>
-                </div>
-              </div>
-            </div>
+        {isForceReset && (
+          <div role="alert" className="rounded-xl bg-accent-soft text-accent-ink px-4 py-3 text-sm font-medium">
+            Your administrator asked you to set a new password before continuing. Use the Password section below.
           </div>
+        )}
 
-          {/* Settings Forms */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Security Section */}
-            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-                <h3 className="text-base font-bold text-gray-900">Security & Privacy</h3>
-                <p className="text-xs text-gray-500">Manage your password and account security.</p>
-              </div>
-              <div className="p-6 space-y-4">
-                {/* Action Buttons */}
-                {!showPasswordForm && !isForceReset && (
-                  <div className="flex flex-col sm:flex-row gap-3 max-w-md">
-                    <button
-                      onClick={() => setShowPasswordForm(true)}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-brand text-white rounded-lg text-sm font-bold shadow-md hover:bg-brand-hover transition-colors"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                      </svg>
-                      Update Password
-                    </button>
-                    <Link
-                      href="/forgot-password"
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white text-gray-700 border border-gray-300 rounded-lg text-sm font-bold shadow-sm hover:bg-gray-50 transition-colors"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                      Forgot Password
-                    </Link>
-                  </div>
-                )}
-
-                {/* Update Password Form */}
-                {(showPasswordForm || isForceReset) && (
+        <div className="flex gap-4 items-start">
+          <div className="flex-1 min-w-0 flex flex-col gap-4">
+            <Section id="account" title="Account" desc="Your name appears on documents and in the activity log.">
+              <form onSubmit={handleSaveName} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label className={labelCls}>
+                  Full name
+                  <input className={inputCls} value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} maxLength={120} autoComplete="name" />
+                </label>
+                <label className={labelCls}>
+                  Email
+                  <input className={inputCls} value={user?.email ?? ''} disabled />
+                </label>
+                <label className={labelCls}>
+                  Role
+                  <input className={inputCls} value={getRoleDisplayName(role)} disabled />
+                </label>
+                <div className="flex items-end gap-3">
+                  <button
+                    type="submit"
+                    disabled={nameSaving || !nameDraft.trim() || nameDraft.trim() === savedName}
+                    className="min-h-11 px-5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-hover disabled:opacity-50"
+                  >
+                    {nameSaving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="min-h-11 px-4 rounded-xl border border-red-200 text-red-700 text-sm font-semibold hover:bg-red-50"
+                  >
+                    Sign out
+                  </button>
+                </div>
+                <div className="sm:col-span-2">
+                  <StatusLine status={nameStatus} />
+                </div>
+              </form>
+              <dl className="mt-5 pt-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div>
+                  <dt className="text-xs text-gray-600">Last sign-in</dt>
+                  <dd className="mt-0.5 font-medium text-gray-900">
+                    {user?.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString('en-GB') : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-gray-600">Sign-in method</dt>
+                  <dd className="mt-0.5 font-medium text-gray-900">Email and password</dd>
+                </div>
+                {/* "Joined" is shown to admins only, per the requirements. */}
+                {isAdmin && user?.created_at && (
                   <div>
-                    {!isForceReset && (
-                      <button
-                        onClick={() => { setShowPasswordForm(false); setUpdateStatus(''); }}
-                        className="text-xs font-bold text-gray-500 hover:text-gray-700 mb-4 flex items-center gap-1 transition-colors"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                        </svg>
-                        Back to options
-                      </button>
-                    )}
-                    <form onSubmit={handleUpdatePassword} className="space-y-4 max-w-md">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
-                          Current Password
-                        </label>
-                        <input 
-                          type="password"
-                          value={currentPassword}
-                          onChange={(e) => setCurrentPassword(e.target.value)}
-                          placeholder="Enter your current password"
-                          className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
-                          New Password
-                        </label>
-                        <input 
-                          type="password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="Minimum 6 characters"
-                          className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none"
-                          required
-                          minLength={6}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
-                          Confirm New Password
-                        </label>
-                        <input 
-                          type="password"
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          placeholder="Re-enter your new password"
-                          className={`w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all outline-none ${
-                            confirmPassword && confirmPassword !== newPassword ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                          required
-                          minLength={6}
-                        />
-                        {confirmPassword && confirmPassword !== newPassword && (
-                          <p className="text-xs text-red-500 mt-1 font-medium">Passwords do not match</p>
-                        )}
-                      </div>
-                      <button 
-                        type="submit"
-                        disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword}
-                        className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-brand-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {passwordLoading ? 'Processing...' : 'Update Password'}
-                      </button>
-                      {updateStatus && (
-                        <p className={`text-xs mt-2 font-medium ${updateStatus.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
-                          {updateStatus}
-                        </p>
-                      )}
-                    </form>
+                    <dt className="text-xs text-gray-600">Joined</dt>
+                    <dd className="mt-0.5 font-medium text-gray-900">{new Date(user.created_at).toLocaleDateString('en-GB')}</dd>
                   </div>
                 )}
-              </div>
-            </section>
+              </dl>
+            </Section>
 
-            {/* Notifications Section */}
-            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-                <h3 className="text-base font-bold text-gray-900">Notification Preferences</h3>
-                <p className="text-xs text-gray-500">Manage how you receive alerts and summaries.</p>
-              </div>
-              <div className="p-6 space-y-4">
-                {[
-                  { id: 'n1', label: 'Email Anomaly Alerts', desc: 'Get notified immediately when grid anomalies are detected.' },
-                  { id: 'n2', label: 'Weekly Briefing Digest', desc: 'Receive a summary of sector performance every Monday.' },
-                  { id: 'n3', label: 'Legal Matter Updates', desc: 'Notifications for upcoming deadlines in your matters.' },
-                ].map((item) => (
-                  <div key={item.id} className="flex items-start">
-                    <div className="flex items-center h-5">
-                      <input 
-                        id={item.id}
-                        type="checkbox"
-                        defaultChecked
-                        className="h-4 w-4 text-brand focus:ring-brand border-gray-300 rounded"
-                      />
-                    </div>
-                    <div className="ml-3 text-sm">
-                      <label htmlFor={item.id} className="font-bold text-gray-900">{item.label}</label>
-                      <p className="text-gray-500 text-xs">{item.desc}</p>
-                    </div>
-                  </div>
+            <Section id="password" title="Password" desc="Your current password is checked first. Changing it signs out your other devices.">
+              <form onSubmit={handleUpdatePassword} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <label className={labelCls}>
+                  Current password
+                  <input type="password" className={inputCls} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} autoComplete="current-password" required />
+                </label>
+                <label className={labelCls}>
+                  New password
+                  <input type="password" className={inputCls} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" minLength={6} required />
+                  <span className="font-normal text-gray-600">At least 6 characters.</span>
+                </label>
+                <label className={labelCls}>
+                  Confirm new password
+                  <input
+                    type="password"
+                    className={`${inputCls} ${mismatch ? 'border-red-400' : ''}`}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                    aria-invalid={mismatch}
+                    required
+                  />
+                  {mismatch && <span className="font-medium text-red-700">Passwords do not match.</span>}
+                </label>
+                <div className="lg:col-span-3 flex flex-wrap items-center gap-4">
+                  <button
+                    type="submit"
+                    disabled={passwordSaving || !currentPassword || !newPassword || mismatch}
+                    className="min-h-11 px-5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-hover disabled:opacity-50"
+                  >
+                    {passwordSaving ? 'Updating…' : 'Update password'}
+                  </button>
+                  <Link href="/forgot-password" className="text-sm font-semibold text-brand hover:underline">
+                    Forgot your current password?
+                  </Link>
+                </div>
+                <div className="lg:col-span-3">
+                  <StatusLine status={passwordStatus} />
+                </div>
+              </form>
+            </Section>
+
+            <Section id="notifications" title="Notifications" desc="Choose what reaches you.">
+              <div className="flex flex-col divide-y divide-gray-100">
+                {NOTIFICATION_OPTIONS.map((n) => (
+                  <label key={n.id} htmlFor={n.id} className="flex items-start justify-between gap-4 py-3 cursor-pointer">
+                    <span>
+                      <span className="block text-sm font-semibold text-gray-900">{n.label}</span>
+                      <span className="block text-xs text-gray-600">{n.desc}</span>
+                    </span>
+                    <input id={n.id} type="checkbox" defaultChecked className="mt-1 h-5 w-5 rounded accent-brand shrink-0" />
+                  </label>
                 ))}
               </div>
-            </section>
+            </Section>
 
-            {/* Activity Log (from database) */}
-            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-                <h3 className="text-base font-bold text-gray-900">Recent Activity</h3>
-                <p className="text-xs text-gray-500">A log of your recent interactions with the hub.</p>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {activityLoading ? (
-                  <div className="p-8 text-center">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand mx-auto"></div>
-                    <p className="text-xs text-gray-500 mt-2">Loading activity...</p>
-                  </div>
-                ) : activityLog.length > 0 ? (
-                  activityLog.map((activity, idx) => (
-                    <div key={activity.id || idx} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">
-                          {activity.action?.replace(/_/g, ' ') || 'Activity'}
-                        </p>
-                        <p className="text-xs text-gray-500">{activity.details || ''}</p>
-                      </div>
-                      <span className="text-[10px] font-medium text-gray-400 uppercase whitespace-nowrap">
-                        {formatTimeAgo(activity.created_at)}
+            <Section id="activity" title="My activity" desc="Your last 20 actions. Only you and admins can see this.">
+              {activity.length === 0 ? (
+                <p className="text-sm text-gray-600 py-2">No activity recorded yet.</p>
+              ) : (
+                <ol className="flex flex-col">
+                  {activity.map((a) => (
+                    <li key={a.id} className="flex gap-4 py-2.5 border-b border-gray-100 last:border-0 text-sm">
+                      <time dateTime={a.created_at} className="w-24 shrink-0 font-mono text-xs text-gray-600 pt-0.5">
+                        {formatWhen(a.created_at)}
+                      </time>
+                      <span className="min-w-0">
+                        <span className="block font-semibold text-gray-900">
+                          {(a.action ?? 'Activity').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}
+                        </span>
+                        {a.details && <span className="block text-xs text-gray-600">{a.details}</span>}
                       </span>
-                    </div>
-                  ))
-                ) : (
-                  /* Fallback: show mock data if no real logs exist yet */
-                  [
-                    { action: 'AI Query', target: 'Latest tariff orders for IBEDC', time: '2 hours ago' },
-                    { action: 'Document Uploaded', target: 'NERC_Enforcement_EGBIN.pdf', time: 'Yesterday' },
-                    { action: 'Login', target: 'Successful login', time: 'Yesterday' },
-                  ].map((activity, idx) => (
-                    <div key={idx} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">{activity.action}</p>
-                        <p className="text-xs text-gray-500">{activity.target}</p>
-                      </div>
-                      <span className="text-[10px] font-medium text-gray-400 uppercase">{activity.time}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Section>
           </div>
+
+          {/* "On this page" index — right side, matching the News filter rail */}
+          <nav aria-label="On this page" className="hidden lg:flex w-[200px] shrink-0 sticky top-0 bg-white rounded-2xl p-3.5 flex-col gap-0.5">
+            <p className="px-2.5 pb-1.5 text-[11px] font-extrabold tracking-wider uppercase text-gray-600">On this page</p>
+            {SECTIONS.map((s) => (
+              <a
+                key={s.id}
+                href={`#${s.id}`}
+                onClick={jumpTo(s.id)}
+                aria-current={activeSection === s.id ? 'true' : undefined}
+                className={`min-h-9 px-2.5 rounded-lg text-sm flex items-center ${
+                  activeSection === s.id ? 'bg-brand/10 text-brand font-bold' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {s.label}
+              </a>
+            ))}
+          </nav>
         </div>
       </div>
     </main>

@@ -1,201 +1,244 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { readSessions, sessionTime, writeSessions, type ChatSession } from '@/utils/chatSessions';
+import { groupByDay } from '@/utils/news/feedView';
 
-interface HistoryItem {
-  id: string | number;
-  query: string;
-  timestamp: string;
-  sessionLength: number;
-  messages: { role: 'user' | 'assistant'; content: string }[];
-}
+type Range = 'all' | '7d' | '30d';
 
-const defaultHistory: HistoryItem[] = [
-  {
-    id: 1,
-    query: 'What was the total generation output last week?',
-    timestamp: '2026-05-16 10:42 AM',
-    sessionLength: 4,
-    messages: [
-      { role: 'user', content: 'What was the total generation output last week?' },
-      { role: 'assistant', content: 'The total generation output for the week of May 10-16, 2026 was approximately **4,287 MWh** across all tracked power plants. This represents a **3.2% increase** compared to the previous week.\n\n### Top Contributors:\n- **Egbin Thermal**: 1,120 MWh\n- **Azura-Edo IPP**: 890 MWh\n- **Shiroro Hydro**: 740 MWh' },
-      { role: 'user', content: 'How does this compare to the monthly average?' },
-      { role: 'assistant', content: 'The weekly output of 4,287 MWh is **7% above** the monthly average of 4,007 MWh for May 2026. This is largely driven by improved gas supply at the Escravos-Lagos Pipeline System (ELPS) and seasonal hydro improvements at Shiroro and Kainji.' },
-    ],
-  },
-  {
-    id: 2,
-    query: 'Show me all NERC enforcement actions from the last six months',
-    timestamp: '2026-05-15 04:15 PM',
-    sessionLength: 12,
-    messages: [
-      { role: 'user', content: 'Show me all NERC enforcement actions from the last six months' },
-      { role: 'assistant', content: 'I found **8 enforcement actions** issued by NERC between November 2025 and May 2026:\n\n1. **Warning to Benin DISCO** — Service quality failures (Dec 2025)\n2. **Fine of ₦500M to Enugu DISCO** — Metering compliance (Jan 2026)\n3. **License suspension threat to PHED** — Outstanding market settlement (Feb 2026)\n4. **Notice to Kaduna DISCO** — Customer complaint resolution (Mar 2026)' },
-    ],
-  },
-  {
-    id: 3,
-    query: 'Explain the impact of the new tariff order on industrial consumers',
-    timestamp: '2026-05-14 09:30 AM',
-    sessionLength: 8,
-    messages: [
-      { role: 'user', content: 'Explain the impact of the new tariff order on industrial consumers' },
-      { role: 'assistant', content: 'The NERC Multi-Year Tariff Order (MYTO) 2024, effective July 2026, introduces significant changes for industrial consumers classified under **Band A and Band B**:\n\n### Key Changes:\n- **Band A industrial tariff** increases by 12.3% to ₦225/kWh\n- **Minimum availability guarantee** of 20 hours/day for Band A\n- **Cost-reflective pricing** now includes a carbon adjustment surcharge\n\n### Impact Assessment:\nIndustrial consumers in the Band A category should expect an average monthly increase of approximately **₦1.8M** for mid-sized manufacturing facilities.' },
-    ],
-  },
+const RANGES: { value: Range; label: string; days: number | null }[] = [
+  { value: 'all', label: 'Any time', days: null },
+  { value: '7d', label: 'Last 7 days', days: 7 },
+  { value: '30d', label: 'Last 30 days', days: 30 },
 ];
 
-export default function HistoryPage() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedConversation, setSelectedConversation] = useState<HistoryItem | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+type Row = ChatSession & { published_at: string | null; time: number | null };
 
+function clock(t: number | null) {
+  return t === null ? '' : new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+export default function HistoryPage() {
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [search, setSearch] = useState('');
+  const [range, setRange] = useState<Range>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [now, setNow] = useState(0); // set on load, so filtering stays pure during render
+
+  // localStorage is only available in the browser.
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('epdh_chat_sessions') || '[]');
-      if (Array.isArray(saved) && saved.length > 0) {
-        setHistory([...saved, ...defaultHistory]);
-      } else {
-        setHistory(defaultHistory);
-      }
-    } catch (e) {
-      setHistory(defaultHistory);
-    }
+    const id = window.setTimeout(() => {
+      setSessions(readSessions());
+      setNow(Date.now());
+      setLoaded(true);
+    }, 0);
+    return () => window.clearTimeout(id);
   }, []);
 
-  const handleDeleteSession = (id: string | number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const updated = history.filter(item => item.id !== id);
-    setHistory(updated);
-    if (selectedConversation?.id === id) {
-      setSelectedConversation(null);
-    }
-    try {
-      const saved = JSON.parse(localStorage.getItem('epdh_chat_sessions') || '[]');
-      const filtered = saved.filter((s: any) => String(s.id) !== String(id));
-      localStorage.setItem('epdh_chat_sessions', JSON.stringify(filtered));
-    } catch (err) {
-      // ignore
-    }
+  const rows: Row[] = useMemo(() => {
+    const days = RANGES.find((r) => r.value === range)?.days ?? null;
+    const cutoff = days === null ? null : now - days * 86_400_000;
+    const q = search.trim().toLowerCase();
+    return sessions
+      .map((s) => {
+        const time = sessionTime(s);
+        return { ...s, time, published_at: time === null ? null : new Date(time).toISOString() };
+      })
+      .filter((s) => cutoff === null || (s.time !== null && s.time >= cutoff))
+      .filter((s) => !q || s.query.toLowerCase().includes(q) || s.messages.some((m) => m.content.toLowerCase().includes(q)))
+      .sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
+  }, [sessions, search, range, now]);
+
+  const groups = groupByDay(rows, new Date(now || 0));
+  const selected = rows.find((r) => r.id === selectedId) ?? null;
+
+  const deleteSelected = () => {
+    if (!selected) return;
+    const remaining = readSessions().filter((s) => s.id !== selected.id);
+    writeSessions(remaining);
+    setSessions(remaining);
+    setSelectedId(null);
+    setConfirmDelete(false);
   };
 
-  const filteredHistory = history.filter(item => 
-    item.query.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const select = (id: string) => {
+    setSelectedId(id);
+    setConfirmDelete(false);
+  };
 
   return (
-    <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50">
-      <div className="max-w-5xl mx-auto space-y-6">
-        
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 border-b border-gray-200 gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Conversation History</h1>
-            <p className="mt-1 text-sm text-gray-500">Access, review, and search your saved AI conversation sessions.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 sm:flex-none">
-              <input 
-                type="text" 
-                placeholder="Search keywords..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-lg border-gray-200 py-2 pl-3 pr-10 text-xs font-semibold border focus:ring-brand focus:border-brand" 
-              />
-              <svg className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <select className="rounded-lg border-gray-200 py-2 pl-3 pr-8 text-[10px] font-bold border focus:ring-brand uppercase tracking-wider">
-              <option>All Time</option>
-              <option>Last 7 Days</option>
-              <option>Last 30 Days</option>
-            </select>
-          </div>
-        </div>
-        
-        <div className="flex gap-6">
-          {/* Conversation list */}
-          <div className={`${selectedConversation ? 'w-2/5' : 'w-full'} transition-all duration-300`}>
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-                <h2 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Saved AI Sessions</h2>
-                <span className="text-[10px] font-bold text-gray-400 uppercase">{filteredHistory.length} Results</span>
-              </div>
-              <ul className="divide-y divide-gray-200">
-                {filteredHistory.length === 0 ? (
-                  <li className="p-12 text-center text-sm text-gray-500 italic">No matching conversations found.</li>
-                ) : filteredHistory.map((item) => (
-                  <li
-                    key={item.id}
-                    onClick={() => setSelectedConversation(item)}
-                    className={`p-5 cursor-pointer transition-all group ${
-                      selectedConversation?.id === item.id
-                        ? 'bg-brand/5 border-l-[3px] border-l-brand'
-                        : 'hover:bg-gray-50/80 border-l-[3px] border-l-transparent'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1">
-                        <p className={`text-sm font-bold transition-colors ${
-                          selectedConversation?.id === item.id ? 'text-brand' : 'text-gray-900 group-hover:text-brand'
-                        }`}>{item.query}</p>
-                        <div className="flex items-center gap-3 mt-2">
-                           <span className="text-[10px] font-bold text-gray-400 uppercase">{item.timestamp}</span>
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className="flex flex-col items-end gap-1.5">
-                          <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600">
-                            {item.sessionLength} MESSAGES
-                          </span>
-                          <button
-                            onClick={(e) => handleDeleteSession(item.id, e)}
-                            className="text-[10px] font-bold text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Delete session"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+    <main className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-hidden">
+      <div className="max-w-[1400px] w-full mx-auto flex-1 min-h-0 flex flex-col gap-4">
+        <header className="flex flex-wrap items-center gap-3">
+          <h1 className="mr-2 text-2xl font-extrabold tracking-tight text-gray-900">Conversation History</h1>
+          <label htmlFor="history-search" className="sr-only">
+            Search conversations
+          </label>
+          <input
+            id="history-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search questions and answers…"
+            className="flex-1 min-w-[180px] min-h-11 rounded-xl border border-gray-200 bg-white px-3.5 text-sm outline-none focus:ring-2 focus:ring-brand"
+          />
+          <label htmlFor="history-range" className="sr-only">
+            Time range
+          </label>
+          <select
+            id="history-range"
+            value={range}
+            onChange={(e) => setRange(e.target.value as Range)}
+            className="min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-[13px] outline-none focus:ring-2 focus:ring-brand"
+          >
+            {RANGES.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+          <Link
+            href="/query"
+            className="min-h-11 px-4 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-hover inline-flex items-center"
+          >
+            New conversation
+          </Link>
+        </header>
 
-          {/* Inline Preview Pane */}
-          {selectedConversation && (
-            <div className="w-3/5 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col animate-in fade-in slide-in-from-right-4">
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-                <div>
-                  <h2 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Conversation Preview</h2>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{selectedConversation.timestamp}</p>
+        <p className="text-xs text-gray-600 -mt-2">Conversations are saved in this browser only.</p>
+
+        <div className="flex-1 min-h-0 flex gap-4 items-stretch">
+          {/* List */}
+          <section
+            aria-label="Conversations"
+            className={`scroll-panel relative bg-white rounded-2xl p-3 w-full md:w-[360px] md:shrink-0 ${selected ? 'hidden md:block' : 'block'}`}
+          >
+            {!loaded ? null : rows.length === 0 ? (
+              <div className="p-8 text-center space-y-2">
+                <p className="text-sm font-semibold text-gray-900">
+                  {sessions.length === 0 ? 'No saved conversations yet.' : 'No conversations match.'}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {sessions.length === 0 ? 'Questions you ask in AI Query are saved here automatically.' : 'Try another search or time range.'}
+                </p>
+              </div>
+            ) : (
+              groups.map((g) => (
+                <div key={g.key} className="mb-2">
+                  <h2 className="px-2.5 pt-2 pb-1.5 text-[11px] font-extrabold tracking-wider uppercase text-gray-600">{g.label}</h2>
+                  <ul className="flex flex-col gap-0.5">
+                    {g.items.map((s) => {
+                      const active = s.id === selectedId;
+                      return (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            onClick={() => select(s.id)}
+                            aria-current={active ? 'true' : undefined}
+                            className={`w-full text-left rounded-xl px-3 py-2.5 flex flex-col gap-0.5 transition-colors ${
+                              active ? 'bg-brand/10' : 'hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className={`text-sm leading-snug line-clamp-2 ${active ? 'font-bold text-brand' : 'font-semibold text-gray-900'}`}>
+                              {s.query}
+                            </span>
+                            <span className="text-xs text-gray-600">
+                              {clock(s.time)}
+                              {s.time !== null && ' · '}
+                              {s.sessionLength} message{s.sessionLength === 1 ? '' : 's'}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-                <button
-                  onClick={() => setSelectedConversation(null)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[calc(100vh-280px)]">
-                {selectedConversation.messages.map((msg, idx) => (
-                  <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[90%] rounded-lg px-4 py-3 text-sm ${
-                      msg.role === 'user'
-                        ? 'bg-brand text-white'
-                        : 'bg-gray-50 border border-gray-200 text-gray-800'
-                    }`}>
-                      <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                    </div>
+              ))
+            )}
+          </section>
+
+          {/* Detail */}
+          <section
+            aria-label="Conversation"
+            className={`flex-1 min-w-0 bg-white rounded-2xl flex-col ${selected ? 'flex' : 'hidden md:flex'}`}
+          >
+            {selected ? (
+              <>
+                <div className="flex flex-wrap items-start justify-between gap-3 p-5 border-b border-gray-100">
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(null)}
+                      className="md:hidden mb-2 min-h-9 text-sm font-semibold text-brand"
+                    >
+                      ← All conversations
+                    </button>
+                    <h2 className="text-lg font-extrabold text-gray-900 leading-snug">{selected.query}</h2>
+                    <p className="mt-1 text-sm text-gray-600">
+                      {selected.time !== null &&
+                        new Date(selected.time).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + ' · '}
+                      {selected.sessionLength} message{selected.sessionLength === 1 ? '' : 's'}
+                    </p>
                   </div>
-                ))}
+                  <div className="flex flex-wrap gap-2">
+                    {confirmDelete ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={deleteSelected}
+                          className="min-h-10 px-3.5 rounded-xl bg-red-700 text-white text-sm font-semibold"
+                        >
+                          Delete for good
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(false)}
+                          className="min-h-10 px-3.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-900"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(true)}
+                        className="min-h-10 px-3.5 rounded-xl border border-gray-200 text-sm font-semibold text-red-700 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    )}
+                    <Link
+                      href={`/query?session=${encodeURIComponent(selected.id)}`}
+                      className="min-h-10 px-4 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-hover inline-flex items-center"
+                    >
+                      Continue conversation
+                    </Link>
+                  </div>
+                </div>
+                <div className="scroll-panel relative flex-1 min-h-0 p-5 flex flex-col gap-3.5">
+                  {selected.messages.map((m, i) => (
+                    <div
+                      key={i}
+                      className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap shrink-0 ${
+                        m.role === 'user'
+                          ? 'self-end bg-brand text-white rounded-2xl rounded-br-md'
+                          : 'self-start bg-gray-50 text-gray-900 rounded-2xl rounded-bl-md'
+                      }`}
+                    >
+                      {m.content}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center p-10 text-center">
+                <p className="text-sm text-gray-600">Select a conversation to read it here.</p>
               </div>
-            </div>
-          )}
+            )}
+          </section>
         </div>
       </div>
     </main>

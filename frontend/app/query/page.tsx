@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { readSessions, writeSessions, type ChatSession } from '@/utils/chatSessions';
 
 const initialMessage = {
   id: 1,
@@ -94,21 +95,35 @@ export default function QueryPage() {
     return () => window.clearTimeout(id);
   }, []);
 
+  // Reopen a saved conversation handed over from History (/query?session=<id>).
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('session');
+    if (!wanted) return;
+    const id = window.setTimeout(() => {
+      window.history.replaceState(null, '', window.location.pathname);
+      const saved = readSessions().find((s) => s.id === wanted);
+      if (!saved || saved.messages.length === 0) return;
+      setSessionId(saved.id);
+      setMessages(saved.messages.map((m, i) => ({ id: i + 1, role: m.role, content: m.content })));
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, []);
+
   // Automatically persist live conversation history to localStorage
   useEffect(() => {
     if (messages.length <= 1) return;
     try {
-      const existing = JSON.parse(localStorage.getItem('epdh_chat_sessions') || '[]');
+      const now = new Date();
       const userQuery = messages.find(m => m.role === 'user')?.content || 'AI Query Session';
-      const currentSession = {
+      const currentSession: ChatSession = {
         id: sessionId,
         query: userQuery,
-        timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+        timestamp: now.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+        updatedAt: now.toISOString(),
         sessionLength: messages.length,
-        messages: messages.map(m => ({ role: m.role, content: m.content }))
+        messages: messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       };
-      const updated = [currentSession, ...existing.filter((s: any) => String(s.id) !== String(sessionId))];
-      localStorage.setItem('epdh_chat_sessions', JSON.stringify(updated));
+      writeSessions([currentSession, ...readSessions().filter((s) => s.id !== sessionId)]);
     } catch (err) {
       console.error('Error saving chat history session:', err);
     }

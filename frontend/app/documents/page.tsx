@@ -774,7 +774,8 @@ function DocumentsContent() {
   // ============================================
   // DOCUMENT GENERATOR STATE
   // ============================================
-  const [genTitle, setGenTitle] = useState('');
+  // AI Query's "Turn into document" passes the question as ?title=…
+  const [genTitle, setGenTitle] = useState(() => (searchParams.get('title') ?? '').slice(0, 200));
   const [genKeywords, setGenKeywords] = useState('electricity, tariff, grid, generation');
   const [genDateFrom, setGenDateFrom] = useState('');
   const [genDateTo, setGenDateTo] = useState('');

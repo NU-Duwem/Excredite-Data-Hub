@@ -16,8 +16,52 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-16 · News & Updates redesigned as an "Analyst Feed" (design B)
+**Branch:** `dev` · **PR:** #6 · **Status:** Open
+
+**What and why:** The owner picked design B, a dense, filterable timeline, from three concepts on the design canvas. The filter panel is placed to work alongside the existing 256px app sidebar.
+
+**Layout:**
+- **Toolbar (everyday filters):**
+  - Nigeria / International / All;
+  - time range: 24 hours, 7 days (the default), 30 days or all time;
+  - search;
+  - **Refresh feeds**.
+- **News list:** grouped by day ("Today", "Yesterday", then "Friday 13 November"). Each story is one compact row: time, headline linking to the article, one-line summary, source, region, up to two topic tags, and the anomaly badge where linked. "Load earlier stories" fetches 30 at a time.
+- **Filters panel (topics, sources, feed status):**
+  - Sits on the **right** of the list from 1280px wide, so it never stacks beside the app sidebar.
+  - Narrower screens get a **Filters** button with a count of active filters. It opens a right-hand drawer with the time range, topics and sources, plus Reset and "Show N stories". The drawer closes with Escape or by clicking outside, and keyboard focus returns to the button.
+  - Shows each source with a green or orange dot and "not reached" if its last pull failed, the time of the last pull, and the next hourly pull. If the hourly job has no app address yet, it says automatic pulls start once the app is connected.
+  - Ticking every topic or source counts as no filter, so stories without tags still show.
+- **Removed:** article thumbnails, which the dense design drops. Feed images are still stored in `image_url`.
+
+**Topics:**
+- **Tagging:** new `utils/news/topics.ts` tags each article when it's ingested, using whole-word keywords. The tags are Regulation & tariffs, Grid & transmission, Generation & gas, Distribution & metering, Renewables & storage, and Other for articles that match none. An article can have several. Quantities like "330kV" and "15,000 MVA" count as grid.
+- **Database:** `10_news_topics.sql` adds `news_articles.topics text[]`, a constraint limiting it to those six values, and a GIN index for the topic filter. **Applied to the live Supabase project**, before any code that writes the column. It had 0 articles, so nothing needed backfilling. The security advisor reports nothing new.
+
+**Files:**
+- `10_news_topics.sql` (new)
+- `frontend/utils/news/topics.ts` (new), `frontend/utils/news/feedView.ts` (new: time ranges, day grouping, clock format, filter count, feed status, next pull)
+- `frontend/app/news/FilterPanel.tsx` (new), `frontend/app/news/page.tsx` (rewritten)
+- `frontend/utils/news/ingest.ts` (writes `topics`)
+- `frontend/utils/news/__tests__/topics.test.ts` (new), `feedView.test.ts` (new), `ingest.test.ts`
+- `frontend/vitest.config.ts` (tests run in UTC)
+- `README.md` (SQL run order), `Tracked-changes.md` (PR #5 entries marked Merged)
+
+**Manual steps:** none for this project. `10_news_topics.sql` is already applied. Run it on any other environment before deploying this code.
+
+**Tested:**
+- 144 out of 144 tests pass, 32 of them new: topic tagging (whole words, multiple topics, the database-allowed values), day grouping across midnight and years, time windows, filter counts, feed status and next-pull times.
+- Lint is clean and the production build passes.
+- Rendered as a signed-in non-admin at three widths. At 1440px the rail shows and the Filters button is hidden; at 1024px it's the reverse; at 390px everything stacks.
+- In the drawer, choosing "Last 24 hours" and unticking "Other" produced the correct database query (`published_at >= …` and `topics && {…}`) and a badge of 2.
+- Escape closes the drawer and returns focus.
+- With no articles, the empty state appears.
+
+---
+
 ## 2026-11-16 · Database security hardening (Supabase advisor findings)
-**Branch:** `dev` · **PR:** #5 · **Status:** Open
+**Branch:** `dev` · **PR:** #5 · **Status:** Merged
 
 **What and why:** Fixed every security warning the Supabase advisor reported that SQL can fix: 22 in all, none caused by the news work. Applied to the live Supabase project with the owner's approval, and saved as `09_security_hardening.sql`.
 
@@ -47,7 +91,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-15 · Hourly news schedule switched on; refresh for every user
-**Branch:** `dev` · **PR:** #5 · **Status:** Open
+**Branch:** `dev` · **PR:** #5 · **Status:** Merged
 
 **What and why:** News should update hourly, and anyone, not only admins, should be able to pull the latest on demand.
 

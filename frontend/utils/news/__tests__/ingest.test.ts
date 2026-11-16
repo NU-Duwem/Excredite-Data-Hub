@@ -107,7 +107,7 @@ describe('ingestAllSources: happy path', () => {
 
     expect(summary).toMatchObject({ sources: 1, inserted: 1, failed: 0 });
     const row = db.stored.get('https://news.example/1')!;
-    expect(row).toMatchObject({ source: 'Source a', source_id: 'a', region: 'FOREIGN', title: 'Grid news', summary: 'S' });
+    expect(row).toMatchObject({ source: 'Source a', source_id: 'a', region: 'FOREIGN', title: 'Grid news', summary: 'S', topics: ['grid'] });
     expect(typeof row.fetched_at).toBe('string');
     expect(db.statusUpdates).toEqual([expect.objectContaining({ id: 'a', last_status: 'OK', last_item_count: 1, last_error: null })]);
   });

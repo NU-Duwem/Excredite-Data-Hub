@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseFeed, type FeedItem } from './rss';
 import { isElectricityRelated } from './relevance';
+import { classifyTopics } from './topics';
 
 export type NewsSource = {
   id: string;
@@ -132,6 +133,7 @@ async function ingestSource(admin: SupabaseClient, source: NewsSource, timeoutMs
       guid: i.guid,
       summary: i.summary,
       image_url: i.imageUrl,
+      topics: classifyTopics(i.title, i.summary),
       published_at: i.publishedAt ?? fetchedAt,
       fetched_at: fetchedAt,
     }));

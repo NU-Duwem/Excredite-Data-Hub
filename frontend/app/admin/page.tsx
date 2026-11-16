@@ -1,20 +1,47 @@
 'use client';
 
 import { createClient } from '@/utils/supabase/client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getRoleDisplayName, PRIMARY_ROLES } from '@/utils/roles';
 
-const modulesList = [
-  { id: 'query', name: 'AI Query Interface', path: '/query' },
-  { id: 'history', name: 'Conversation History', path: '/history' },
-  { id: 'alerts', name: 'Anomaly Alerts', path: '/alerts' },
-  { id: 'documents', name: 'Documents Manager', path: '/documents' },
-  { id: 'matters', name: 'Regulatory & Advisory Matters', path: '/matters' },
-  { id: 'news', name: 'News & Updates', path: '/news' },
+type Profile = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+type AuditRow = {
+  id: string;
+  action: string | null;
+  details: string | null;
+  created_at: string;
+  user_profiles: { full_name: string | null; email: string | null } | null;
+};
+
+type Section = 'users' | 'roles' | 'engine' | 'audit';
+type Status = { kind: 'ok' | 'error' | 'info'; text: string } | null;
+
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: 'users', label: 'Users' },
+  { id: 'roles', label: 'Roles & permissions' },
+  { id: 'engine', label: 'Anomaly engine' },
+  { id: 'audit', label: 'Audit log' },
 ];
 
-const initialPermissions: Record<string, string[]> = {
+const MODULES = [
+  { id: 'query', name: 'AI Query' },
+  { id: 'history', name: 'Conversation History' },
+  { id: 'alerts', name: 'Anomaly Alerts' },
+  { id: 'documents', name: 'Documents' },
+  { id: 'matters', name: 'Matters' },
+  { id: 'news', name: 'News & Updates' },
+];
+
+const INITIAL_PERMISSIONS: Record<string, string[]> = {
   power_admin: ['query', 'history', 'alerts', 'documents', 'matters', 'news'],
   power_ceo: ['query', 'history', 'alerts', 'documents', 'matters', 'news'],
   power_legal: ['query', 'history', 'matters'],
@@ -22,788 +49,672 @@ const initialPermissions: Record<string, string[]> = {
   power_app: ['query', 'history', 'alerts', 'documents', 'matters', 'news'],
   power_ingestion: ['query', 'history', 'documents'],
   power_team: ['query', 'history'],
+  power_ai: ['query'],
 };
 
-type AdminTab = 'users' | 'settings' | 'activity';
+const inputCls =
+  'w-full min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-brand focus:border-transparent';
+const labelCls = 'flex flex-col gap-1.5 text-xs font-bold text-gray-700';
+const btn = 'min-h-11 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-brand hover:bg-gray-50 disabled:opacity-50';
+const btnPrimary = 'min-h-11 px-4 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-hover disabled:opacity-50';
 
-export default function AdminPanelPage() {
-  const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [users, setUsers] = useState<any[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUser, setSelectedUser] = useState<any | null>(null);
-  const [activeTab, setActiveTab] = useState<AdminTab>('users');
-  const [maskData, setMaskData] = useState(false); // Demo Mode Data Masking
-  
-  // States for Duty/Role Management
-  const [editRole, setEditRole] = useState('');
-  const [editIsActive, setEditIsActive] = useState(true);
-  const [statusMessage, setStatusMessage] = useState({ text: '', type: '' });
-  const [actionLoading, setActionLoading] = useState(false);
-  
-  // Create User Modal State
-  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
-  const [createUserForm, setCreateUserForm] = useState({
-    fullName: '',
-    email: '',
-    role: 'power_analyst',
-    password: '',
-  });
+const initialsOf = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || '?';
 
-  // Permissions Matrix State
-  const [permissions, setPermissions] = useState<Record<string, string[]>>(initialPermissions);
-
-  // System Settings State
-  const [anomalyThreshold, setAnomalyThreshold] = useState('2.0');
-  const [anomalyAlertsEnabled, setAnomalyAlertsEnabled] = useState(true);
-  const [settingsLoading, setSettingsLoading] = useState(false);
-
-  // Activity Log State
-  const [allActivityLogs, setAllActivityLogs] = useState<any[]>([]);
-  const [activityLoading, setActivityLoading] = useState(false);
-
-  const supabase = createClient();
-  const router = useRouter();
-
-  useEffect(() => {
-    const checkAdminAndFetchUsers = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-      
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-        
-      if (!profile || profile.role !== 'power_admin') {
-        router.push('/query');
-        return;
-      }
-      
-      setIsAdmin(true);
-      
-      const { data: userList } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .order('full_name', { ascending: true });
-        
-      setUsers(userList || []);
-
-      const { data: settings } = await supabase
-        .from('system_settings')
-        .select('*');
-      
-      if (settings) {
-        const threshold = settings.find(s => s.key === 'anomaly_detection_threshold');
-        const enabled = settings.find(s => s.key === 'anomaly_alerts_enabled');
-        if (threshold) setAnomalyThreshold(threshold.value);
-        if (enabled) setAnomalyAlertsEnabled(enabled.value === 'true');
-      }
-
-      setLoading(false);
-    };
-    
-    checkAdminAndFetchUsers();
-  }, [supabase, router]);
-
-  const callAdminApi = async (body: any) => {
-    const response = await fetch('/api/admin/users', {
+async function callAdminApi(body: Record<string, unknown>): Promise<{ error?: string; message?: string; data?: unknown }> {
+  try {
+    const res = await fetch('/api/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    return response.json();
-  };
+    const json = await res.json().catch(() => ({}));
+    return res.ok ? json : { error: json.error || `HTTP ${res.status}` };
+  } catch {
+    return { error: 'Could not reach the server.' };
+  }
+}
 
-  const selectUser = (user: any) => {
-    setSelectedUser(user);
-    setEditRole(user.role);
-    setEditIsActive(user.is_active);
-    setStatusMessage({ text: '', type: '' });
-  };
-
-  const handleUpdateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedUser) return;
-    
-    setActionLoading(true);
-    setStatusMessage({ text: 'Saving changes...', type: 'info' });
-
-    const result = await callAdminApi({
-      action: 'set-status',
-      targetUserId: selectedUser.id,
-      value: editIsActive,
-    });
-
-    if (result.error) {
-      setStatusMessage({ text: `Error: ${result.error}`, type: 'error' });
-    } else {
-      setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, is_active: editIsActive, role: editRole } : u));
-      setSelectedUser((prev: any) => ({ ...prev, is_active: editIsActive, role: editRole }));
-      setStatusMessage({ text: `Successfully updated permissions and status for ${selectedUser.full_name || selectedUser.email}.`, type: 'success' });
-    }
-    setActionLoading(false);
-  };
-
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!createUserForm.email || !createUserForm.password) return;
-    setActionLoading(true);
-    setStatusMessage({ text: 'Creating new user...', type: 'info' });
-
-    const result = await callAdminApi({
-      action: 'create-user',
-      email: createUserForm.email,
-      password: createUserForm.password,
-      fullName: createUserForm.fullName,
-      role: createUserForm.role,
-    });
-
-    if (result.error) {
-      setStatusMessage({ text: `Error creating user: ${result.error}`, type: 'error' });
-    } else {
-      setStatusMessage({ text: `User ${createUserForm.fullName || createUserForm.email} created successfully!`, type: 'success' });
-      setShowCreateUserModal(false);
-      setCreateUserForm({ fullName: '', email: '', role: 'power_analyst', password: '' });
-      // Refetch user list
-      const { data: userList } = await supabase.from('user_profiles').select('*').order('full_name', { ascending: true });
-      setUsers(userList || []);
-    }
-    setActionLoading(false);
-  };
-
-  const handleResetPassword = async (targetUser?: any) => {
-    const userToReset = targetUser || selectedUser;
-    if (!userToReset) return;
-    setActionLoading(true);
-    setStatusMessage({ text: `Sending password reset email to ${userToReset.email}...`, type: 'info' });
-
-    const result = await callAdminApi({
-      action: 'reset-password',
-      email: userToReset.email,
-    });
-
-    if (result.error) {
-      setStatusMessage({ text: `Error resetting password: ${result.error}`, type: 'error' });
-    } else {
-      setStatusMessage({ text: `Password reset email dispatched to ${userToReset.email}.`, type: 'success' });
-    }
-    setActionLoading(false);
-  };
-
-  const handleToggleUserStatus = async (user: any) => {
-    const newStatus = !user.is_active;
-    setActionLoading(true);
-    const result = await callAdminApi({
-      action: 'set-status',
-      targetUserId: user.id,
-      value: newStatus,
-    });
-    if (!result.error) {
-      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, is_active: newStatus } : u));
-      setStatusMessage({ text: `Updated status for ${user.full_name || user.email} to ${newStatus ? 'Active' : 'Deactivated'}.`, type: 'success' });
-    }
-    setActionLoading(false);
-  };
-
-  const handleTogglePermission = (role: string, moduleId: string) => {
-    setPermissions(prev => {
-      const currentMods = prev[role] || [];
-      const updatedMods = currentMods.includes(moduleId)
-        ? currentMods.filter(m => m !== moduleId)
-        : [...currentMods, moduleId];
-      return { ...prev, [role]: updatedMods };
-    });
-    setStatusMessage({ text: `Updated access permissions for ${getRoleDisplayName(role)} role.`, type: 'success' });
-  };
-
-  const handleSaveSettings = async () => {
-    setSettingsLoading(true);
-    setStatusMessage({ text: 'Saving system settings...', type: 'info' });
-    try {
-      await supabase.from('system_settings').upsert([
-        { key: 'anomaly_detection_threshold', value: anomalyThreshold, updated_at: new Date().toISOString() },
-        { key: 'anomaly_alerts_enabled', value: String(anomalyAlertsEnabled), updated_at: new Date().toISOString() },
-      ]);
-      setStatusMessage({ text: 'System settings saved successfully.', type: 'success' });
-    } catch (e: any) {
-      setStatusMessage({ text: `Error saving settings: ${e.message}`, type: 'error' });
-    }
-    setSettingsLoading(false);
-  };
-
-  const loadActivityLogs = async () => {
-    setActivityLoading(true);
-    const { data } = await supabase
-      .from('activity_logs')
-      .select('*, user_profiles(full_name, email)')
-      .order('created_at', { ascending: false })
-      .limit(50);
-    
-    if (data && data.length > 0) {
-      setAllActivityLogs(data);
-    } else {
-      setAllActivityLogs([
-        { id: '1', action: 'ROLE_PERMISSION_UPDATE', details: 'Updated access permissions for Legal Team role', created_at: new Date(Date.now() - 1000 * 60 * 15).toISOString(), user_profiles: { full_name: 'System Admin', email: 'admin@epdh.ng' } },
-        { id: '2', action: 'DATA_REFRESH_TRIGGERED', details: 'Triggered telemetry pipeline refresh for thermal power plants', created_at: new Date(Date.now() - 1000 * 60 * 45).toISOString(), user_profiles: { full_name: 'System Admin', email: 'admin@epdh.ng' } },
-        { id: '3', action: 'USER_ROLE_CHANGE', details: 'Assigned Research Analyst role to user J. Doe', created_at: new Date(Date.now() - 1000 * 60 * 120).toISOString(), user_profiles: { full_name: 'Chief Executive Officer (CEO)', email: 'ceo@epdh.ng' } },
-        { id: '4', action: 'ANOMALY_THRESHOLD_UPDATE', details: 'Updated anomaly detection threshold to 2.0σ', created_at: new Date(Date.now() - 1000 * 60 * 300).toISOString(), user_profiles: { full_name: 'System Admin', email: 'admin@epdh.ng' } },
-      ]);
-    }
-    setActivityLoading(false);
-  };
-
-  const maskString = (str: string, type: 'name' | 'email') => {
-    if (!maskData || !str) return str;
-    if (type === 'email') {
-      const [name, domain] = str.split('@');
-      if (!domain) return '***';
-      return `${name[0]}***@${domain}`;
-    }
-    const parts = str.split(' ');
-    return parts.map(p => p[0] + '***').join(' ');
-  };
-
-  const filteredUsers = users.filter(u => 
-    (u.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (u.email || '').toLowerCase().includes(searchQuery.toLowerCase())
+function StatusBanner({ status, onClose }: { status: Status; onClose: () => void }) {
+  if (!status) return null;
+  const cls =
+    status.kind === 'error' ? 'bg-red-50 text-red-800' : status.kind === 'ok' ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-800';
+  return (
+    <div role="status" className={`flex items-start justify-between gap-3 rounded-xl px-4 py-3 text-sm font-medium ${cls}`}>
+      <span>{status.text}</span>
+      <button type="button" onClick={onClose} aria-label="Dismiss message" className="shrink-0 min-h-6 px-1 opacity-70 hover:opacity-100">
+        ×
+      </button>
+    </div>
   );
+}
 
-  const formatTimeAgo = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + d.toLocaleDateString();
+export default function AdminPanelPage() {
+  const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+
+  const [loading, setLoading] = useState(true);
+  const [myId, setMyId] = useState<string | null>(null);
+  const [section, setSection] = useState<Section>('users');
+  const [status, setStatus] = useState<Status>(null);
+  const [busy, setBusy] = useState(false);
+  const [maskData, setMaskData] = useState(false);
+
+  // Users
+  const [users, setUsers] = useState<Profile[]>([]);
+  const [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editRole, setEditRole] = useState('');
+  const [editActive, setEditActive] = useState(true);
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+
+  // Create user
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ fullName: '', email: '', role: 'power_analyst', password: '' });
+
+  // Roles preview
+  const [permissions, setPermissions] = useState<Record<string, string[]>>(INITIAL_PERMISSIONS);
+
+  // Engine
+  const [threshold, setThreshold] = useState('2.0');
+  const [alertsEnabled, setAlertsEnabled] = useState(true);
+
+  // Audit
+  const [audit, setAudit] = useState<AuditRow[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  const loadUsers = useCallback(async () => {
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('id, email, full_name, role, is_active, created_at')
+      .order('full_name', { ascending: true });
+    return (data ?? []) as Profile[];
+  }, [supabase]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return router.push('/login');
+      const { data: me } = await supabase.from('user_profiles').select('role').eq('id', user.id).single();
+      if (me?.role !== 'power_admin') return router.push('/query');
+
+      const [list, { data: settings }] = await Promise.all([loadUsers(), supabase.from('system_settings').select('key, value')]);
+      if (!active) return;
+      setMyId(user.id);
+      setUsers(list);
+      const t = settings?.find((s) => s.key === 'anomaly_detection_threshold');
+      const e = settings?.find((s) => s.key === 'anomaly_alerts_enabled');
+      if (t) setThreshold(t.value);
+      if (e) setAlertsEnabled(e.value === 'true');
+      setLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [supabase, router, loadUsers]);
+
+  const mask = (value: string | null | undefined, type: 'name' | 'email') => {
+    if (!value) return '';
+    if (!maskData) return value;
+    if (type === 'email') {
+      const [n, domain] = value.split('@');
+      return domain ? `${n[0]}***@${domain}` : '***';
+    }
+    return value
+      .split(' ')
+      .map((p) => `${p[0] ?? ''}***`)
+      .join(' ');
   };
+
+  const filtered = users.filter(
+    (u) => (u.full_name || '').toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()),
+  );
+  const selected = users.find((u) => u.id === selectedId) ?? null;
+  const isSelf = selected?.id === myId;
+  const dirty = !!selected && (editRole !== selected.role || editActive !== selected.is_active);
+
+  const select = (u: Profile) => {
+    setSelectedId(u.id);
+    setEditRole(u.role);
+    setEditActive(u.is_active);
+    setConfirmDeactivate(false);
+    setStatus(null);
+  };
+
+  const applyLocal = (id: string, patch: Partial<Profile>) => setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+
+  const saveUser = async () => {
+    if (!selected) return;
+    setBusy(true);
+    setStatus({ kind: 'info', text: 'Saving…' });
+    if (editRole !== selected.role) {
+      const r = await callAdminApi({ action: 'set-role', targetUserId: selected.id, value: editRole });
+      if (r.error) {
+        setStatus({ kind: 'error', text: r.error });
+        return setBusy(false);
+      }
+      applyLocal(selected.id, { role: editRole });
+    }
+    if (editActive !== selected.is_active) {
+      const r = await callAdminApi({ action: 'set-status', targetUserId: selected.id, value: editActive });
+      if (r.error) {
+        setStatus({ kind: 'error', text: r.error });
+        return setBusy(false);
+      }
+      applyLocal(selected.id, { is_active: editActive });
+    }
+    setStatus({ kind: 'ok', text: `Saved changes for ${selected.full_name || selected.email}.` });
+    setBusy(false);
+  };
+
+  const runAction = async (action: 'reset-password' | 'force-logout', successText: string) => {
+    if (!selected) return;
+    setBusy(true);
+    setStatus({ kind: 'info', text: 'Working…' });
+    const r = await callAdminApi({ action, targetUserId: selected.id });
+    setStatus(r.error ? { kind: 'error', text: r.error } : { kind: 'ok', text: r.message || successText });
+    setBusy(false);
+  };
+
+  const toggleActive = async () => {
+    if (!selected) return;
+    const next = !selected.is_active;
+    setBusy(true);
+    const r = await callAdminApi({ action: 'set-status', targetUserId: selected.id, value: next });
+    if (r.error) setStatus({ kind: 'error', text: r.error });
+    else {
+      applyLocal(selected.id, { is_active: next });
+      setEditActive(next);
+      setStatus({ kind: 'ok', text: `${selected.full_name || selected.email} is now ${next ? 'active' : 'deactivated'}.` });
+    }
+    setConfirmDeactivate(false);
+    setBusy(false);
+  };
+
+  const createUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setStatus({ kind: 'info', text: 'Creating user…' });
+    const r = await callAdminApi({ action: 'create-user', ...createForm });
+    if (r.error) {
+      setStatus({ kind: 'error', text: `Could not create user: ${r.error}` });
+    } else {
+      setStatus({ kind: 'ok', text: `Created ${createForm.fullName || createForm.email}.` });
+      setShowCreate(false);
+      setCreateForm({ fullName: '', email: '', role: 'power_analyst', password: '' });
+      setUsers(await loadUsers());
+    }
+    setBusy(false);
+  };
+
+  const saveEngine = async () => {
+    setBusy(true);
+    setStatus({ kind: 'info', text: 'Saving engine settings…' });
+    const results = await Promise.all([
+      callAdminApi({ action: 'update-setting', key: 'anomaly_detection_threshold', settingValue: threshold }),
+      callAdminApi({ action: 'update-setting', key: 'anomaly_alerts_enabled', settingValue: String(alertsEnabled) }),
+    ]);
+    const failed = results.find((r) => r.error);
+    setStatus(failed ? { kind: 'error', text: `Could not save: ${failed.error}` } : { kind: 'ok', text: 'Engine settings saved.' });
+    setBusy(false);
+  };
+
+  const loadAudit = useCallback(async () => {
+    setAuditLoading(true);
+    setAuditError(null);
+    const r = await callAdminApi({ action: 'get-all-activity' });
+    if (r.error) setAuditError(r.error);
+    else setAudit((r.data ?? []) as AuditRow[]);
+    setAuditLoading(false);
+  }, []);
+
+  const openSection = (s: Section) => {
+    setSection(s);
+    setStatus(null);
+    if (s === 'audit') loadAudit();
+  };
+
+  const togglePermission = (role: string, moduleId: string) =>
+    setPermissions((prev) => {
+      const mods = prev[role] ?? [];
+      return { ...prev, [role]: mods.includes(moduleId) ? mods.filter((m) => m !== moduleId) : [...mods, moduleId] };
+    });
 
   if (loading) {
     return (
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand" />
+      <main className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand" aria-label="Loading" />
       </main>
     );
   }
 
-  if (!isAdmin) return null;
-
   return (
-    <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50">
-      <div className="max-w-7xl mx-auto space-y-6">
-        
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 border-b border-gray-200 gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">System Admin Panel</h1>
-            <p className="mt-1 text-sm text-gray-500">Manage platform users, security roles, system parameters, and operational audit logs.</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Demo Mode / Data Masking Toggle */}
-            <button
-              onClick={() => setMaskData(!maskData)}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
-                maskData ? 'bg-amber-100 border-amber-300 text-amber-900 font-bold' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-              }`}
-              title="Mask real user names and email addresses for demo screenshots"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-              {maskData ? 'Demo Mode: Data Masked' : 'Demo Mode (Mask Data)'}
-            </button>
-
-            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 text-red-800 uppercase tracking-wider">
-              {getRoleDisplayName('power_admin')} Mode
-            </span>
-          </div>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="border-b border-gray-200">
-          <nav className="flex gap-8 overflow-x-auto">
-            {[
-              { id: 'users' as AdminTab, label: 'Users & Permissions' },
-              { id: 'settings' as AdminTab, label: 'Anomaly Engine Settings' },
-              { id: 'activity' as AdminTab, label: 'Platform Activity Audit' },
-            ].map(tab => (
+    <main className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-hidden">
+      <div className="max-w-[1400px] w-full mx-auto flex-1 min-h-0 flex flex-col gap-4">
+        <header className="flex flex-wrap items-center gap-3">
+          <h1 className="mr-2 text-2xl font-extrabold tracking-tight text-gray-900">Admin Panel</h1>
+          <nav aria-label="Admin sections" className="inline-flex flex-wrap rounded-xl bg-white border border-gray-200 p-[3px]">
+            {SECTIONS.map((s) => (
               <button
-                key={tab.id}
-                onClick={() => { setActiveTab(tab.id); if (tab.id === 'activity') loadActivityLogs(); }}
-                className={`pb-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap shrink-0 ${
-                  activeTab === tab.id ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                key={s.id}
+                type="button"
+                onClick={() => openSection(s.id)}
+                aria-current={section === s.id ? 'page' : undefined}
+                className={`min-h-[38px] px-3.5 rounded-[9px] text-[13px] transition-colors ${
+                  section === s.id ? 'bg-brand text-white font-semibold' : 'text-gray-700 font-medium hover:bg-gray-100'
                 }`}
               >
-                {tab.label}
+                {s.label}
               </button>
             ))}
           </nav>
-        </div>
-
-        {/* Status Banner */}
-        {statusMessage.text && (
-          <div className={`p-4 rounded-lg border text-sm font-semibold transition-all ${
-            statusMessage.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
-            statusMessage.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
-            'bg-blue-50 border-blue-200 text-blue-800'
-          }`}>
-            {statusMessage.text}
+          <div className="ml-auto flex items-center gap-2">
+            <label className="inline-flex items-center gap-2 min-h-11 px-3 rounded-xl bg-white border border-gray-200 text-[13px] text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={maskData} onChange={(e) => setMaskData(e.target.checked)} className="h-4 w-4 accent-brand" />
+              Mask names (demo)
+            </label>
+            <button type="button" onClick={() => setShowCreate(true)} className={btnPrimary}>
+              Invite user
+            </button>
           </div>
-        )}
+        </header>
 
-        {/* TAB: Users & Roles */}
-        {activeTab === 'users' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* User Directory Column */}
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gray-50/50">
-                  <div>
-                    <h2 className="text-base font-bold text-gray-900">User Directory</h2>
-                    <p className="text-xs text-gray-500">List of registered Electricity Data Hub accounts</p>
-                  </div>
+        <StatusBanner status={status} onClose={() => setStatus(null)} />
 
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-full sm:w-56">
-                      <input
-                        type="text"
-                        placeholder="Search name or email..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-8 pr-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-brand focus:border-transparent outline-none"
-                      />
-                      <svg className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                    </div>
-
-                    {/* + Create New User Button */}
-                    <button
-                      onClick={() => setShowCreateUserModal(true)}
-                      className="bg-brand text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition-all shadow-sm shrink-0 uppercase tracking-wider"
-                    >
-                      + Create New User
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm divide-y divide-gray-200">
-                    <thead className="bg-gray-50 text-gray-700 text-xs font-bold uppercase tracking-wider">
-                      <tr>
-                        <th className="px-5 py-3">Full Name</th>
-                        <th className="px-5 py-3">Email Address</th>
-                        <th className="px-5 py-3">Assigned Role</th>
-                        <th className="px-5 py-3">Status</th>
-                        <th className="px-5 py-3 text-right">Row Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 bg-white">
-                      {filteredUsers.map((user) => (
-                        <tr 
-                          key={user.id} 
-                          className={`hover:bg-gray-50 transition-colors cursor-pointer ${selectedUser?.id === user.id ? 'bg-brand/5' : ''}`}
-                          onClick={() => selectUser(user)}
-                        >
-                          <td className="px-5 py-4 font-semibold text-gray-900">
-                            {maskString(user.full_name || 'System Account', 'name')}
-                          </td>
-                          <td className="px-5 py-4 text-gray-600 font-mono text-xs">
-                            {maskString(user.email, 'email')}
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold tracking-wide uppercase bg-slate-100 text-slate-800">
-                              {getRoleDisplayName(user.role)}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className={`inline-flex items-center gap-1 text-xs font-semibold ${user.is_active ? 'text-green-600' : 'text-gray-400'}`}>
-                              <span className={`h-1.5 w-1.5 rounded-full ${user.is_active ? 'bg-green-500' : 'bg-gray-300'}`}></span>
-                              {user.is_active ? 'Active' : 'Deactivated'}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                              <button 
-                                onClick={() => handleResetPassword(user)}
-                                className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded border border-amber-200 transition-colors"
-                              >
-                                Reset Pass
-                              </button>
-                              <button 
-                                onClick={() => selectUser(user)}
-                                className="text-[10px] font-bold text-brand bg-brand/10 hover:bg-brand/20 px-2 py-1 rounded transition-colors"
-                              >
-                                Role
-                              </button>
-                              <button 
-                                onClick={() => handleToggleUserStatus(user)}
-                                className={`text-[10px] font-bold px-2 py-1 rounded border transition-colors ${
-                                  user.is_active 
-                                    ? 'text-red-700 bg-red-50 hover:bg-red-100 border-red-200'
-                                    : 'text-green-700 bg-green-50 hover:bg-green-100 border-green-200'
-                                }`}
-                              >
-                                {user.is_active ? 'Deactivate' : 'Activate'}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Role Permissions Matrix */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-5 border-b border-gray-100 bg-gray-50/50">
-                  <h2 className="text-base font-bold text-gray-900">Role Permissions Matrix</h2>
-                  <p className="text-xs text-gray-500">Configure feature access for each security role group.</p>
-                </div>
-                <div className="p-5 overflow-x-auto">
-                  <table className="w-full text-left text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        <th className="pb-3 text-xs font-bold text-gray-500 uppercase">System Module</th>
-                        {PRIMARY_ROLES.map(roleKey => (
-                          <th key={roleKey} className="pb-3 px-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                            {getRoleDisplayName(roleKey)}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {modulesList.map((mod) => (
-                        <tr key={mod.id} className="hover:bg-gray-50/50">
-                          <td className="py-3 font-semibold text-gray-900 text-xs">
-                            {mod.name}
-                            <span className="block text-[10px] text-gray-400 font-normal">{mod.path}</span>
-                          </td>
-                          {PRIMARY_ROLES.map(roleKey => {
-                            const isAllowed = permissions[roleKey]?.includes(mod.id);
-                            return (
-                              <td key={roleKey} className="py-3 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={isAllowed || false}
-                                  onChange={() => handleTogglePermission(roleKey, mod.id)}
-                                  disabled={roleKey === 'power_admin'}
-                                  className="h-4 w-4 text-brand focus:ring-brand border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                />
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Duty & Role Configuration + Admin Quick Actions */}
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                <h3 className="text-base font-bold text-gray-900 mb-2">Duty & Role Configuration</h3>
-                {selectedUser ? (
-                  <div className="space-y-5">
-                    <form onSubmit={handleUpdateUser} className="space-y-5">
-                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                        <p className="text-xs text-gray-500 font-medium">Editing Profile</p>
-                        <p className="text-sm font-bold text-gray-900 mt-0.5">{maskString(selectedUser.full_name || 'System Account', 'name')}</p>
-                        <p className="text-xs text-gray-600 font-mono mt-0.5">{maskString(selectedUser.email, 'email')}</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
-                          Assigned Security Role
-                        </label>
-                        <select
-                          value={editRole}
-                          onChange={(e) => setEditRole(e.target.value)}
-                          className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-transparent outline-none"
-                        >
-                          {PRIMARY_ROLES.map(roleKey => (
-                            <option key={roleKey} value={roleKey}>{getRoleDisplayName(roleKey)}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">
-                          Account Status
-                        </label>
-                        <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setEditIsActive(true)}
-                            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold border transition-all ${
-                              editIsActive ? 'bg-green-50 border-green-300 text-green-700 font-bold' : 'bg-white border-gray-200 text-gray-600'
-                            }`}
-                          >
-                            Active
-                          </button>
-                          <button
-                            type="button"
-                            disabled={selectedUser.role === 'power_admin'}
-                            onClick={() => setEditIsActive(false)}
-                            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold border transition-all disabled:opacity-50 ${
-                              !editIsActive ? 'bg-red-50 border-red-300 text-red-700 font-bold' : 'bg-white border-gray-200 text-gray-600'
-                            }`}
-                          >
-                            Deactivated
-                          </button>
-                        </div>
-                      </div>
-
+        {/* ---------------- Users: split view ---------------- */}
+        {section === 'users' && (
+          <div className="flex-1 min-h-0 flex gap-4 items-stretch">
+            <section
+              aria-label="User directory"
+              className={`scroll-panel relative bg-white rounded-2xl p-3 w-full md:w-[360px] md:shrink-0 ${selected ? 'hidden md:block' : 'block'}`}
+            >
+              <label htmlFor="admin-search" className="sr-only">
+                Search users
+              </label>
+              <input
+                id="admin-search"
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name or email…"
+                className={`${inputCls} mb-2`}
+              />
+              <p className="px-2 pb-1 text-[11px] font-extrabold tracking-wider uppercase text-gray-600">
+                {filtered.length} user{filtered.length === 1 ? '' : 's'}
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {filtered.map((u) => {
+                  const active = u.id === selectedId;
+                  return (
+                    <li key={u.id}>
                       <button
-                        type="submit"
-                        disabled={actionLoading}
-                        className="w-full bg-brand text-white py-2 rounded-lg text-sm font-bold shadow-md hover:opacity-90 transition-colors disabled:opacity-50 uppercase tracking-wider"
+                        type="button"
+                        onClick={() => select(u)}
+                        aria-current={active ? 'true' : undefined}
+                        className={`w-full text-left rounded-xl px-3 py-2.5 flex items-center gap-3 ${active ? 'bg-brand/10' : 'hover:bg-gray-50'}`}
                       >
-                        {actionLoading ? 'Saving...' : 'Save Configuration'}
-                      </button>
-                    </form>
-                  </div>
-                ) : (
-                  <div className="py-12 text-center text-gray-500 border border-dashed border-gray-200 rounded-lg px-4">
-                    <svg className="mx-auto h-8 w-8 text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-xs font-bold text-gray-700">No User Selected</p>
-                    <p className="text-[11px] text-gray-500 mt-1 italic">
-                      Select a user from the directory to view and edit their permissions and access level.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Genuine Admin Quick Actions Card */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-3">
-                <h3 className="text-base font-bold text-gray-900">Admin Operational Actions</h3>
-                <div className="space-y-2">
-                  <button 
-                    onClick={() => setStatusMessage({ text: 'Triggered pipeline telemetry data refresh.', type: 'success' })}
-                    className="w-full text-left py-2 px-3 hover:bg-slate-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 flex items-center justify-between transition-colors"
-                  >
-                    Trigger Data Refresh
-                    <span className="text-brand text-xs font-bold">↻ Run</span>
-                  </button>
-                  <button 
-                    onClick={() => { setActiveTab('activity'); loadActivityLogs(); }}
-                    className="w-full text-left py-2 px-3 hover:bg-slate-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 flex items-center justify-between transition-colors"
-                  >
-                    View System Logs
-                    <span className="text-brand text-xs font-bold">→ View</span>
-                  </button>
-                  <button 
-                    onClick={() => setStatusMessage({ text: 'All data ingestion & AI pipelines report Healthy (100% uptime).', type: 'info' })}
-                    className="w-full text-left py-2 px-3 hover:bg-slate-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 flex items-center justify-between transition-colors"
-                  >
-                    Check Pipeline Status
-                    <span className="text-green-600 text-xs font-bold">● Healthy</span>
-                  </button>
-                  <button 
-                    onClick={() => setStatusMessage({ text: 'All active non-admin user sessions terminated.', type: 'success' })}
-                    className="w-full text-left py-2 px-3 hover:bg-red-50 border border-red-200 rounded-lg text-xs font-bold text-red-700 flex items-center justify-between transition-colors"
-                  >
-                    Force Logout All Sessions
-                    <span className="text-red-600 text-xs font-bold">⚡ Execute</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB: Settings */}
-        {activeTab === 'settings' && (
-          <div className="max-w-2xl space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-                <h2 className="text-base font-bold text-gray-900">Anomaly Detection Engine Settings</h2>
-                <p className="text-xs text-gray-500">Configure telemetry threshold parameters across generation plants.</p>
-              </div>
-              <div className="p-6 space-y-6">
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">Anomaly Alerts Engine</p>
-                    <p className="text-xs text-gray-500">Globally enable or disable generation anomaly detection.</p>
-                  </div>
-                  <button
-                    onClick={() => setAnomalyAlertsEnabled(!anomalyAlertsEnabled)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      anomalyAlertsEnabled ? 'bg-brand' : 'bg-gray-300'
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${
-                      anomalyAlertsEnabled ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
-                  </button>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">
-                    Detection Threshold (Standard Deviations)
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0.5"
-                      max="5.0"
-                      value={anomalyThreshold}
-                      onChange={(e) => setAnomalyThreshold(e.target.value)}
-                      className="w-32 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-center focus:ring-2 focus:ring-brand focus:border-transparent outline-none"
-                    />
-                    <span className="text-xs text-gray-500">σ (sigma)</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleSaveSettings}
-                  disabled={settingsLoading}
-                  className="bg-brand text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md hover:opacity-90 transition-colors uppercase tracking-wider"
-                >
-                  {settingsLoading ? 'Saving...' : 'Save Engine Settings'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB: Activity Audit */}
-        {activeTab === 'activity' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">Platform Activity Audit Log</h2>
-                  <p className="text-xs text-gray-500">All authenticated staff actions across the platform.</p>
-                </div>
-                <button
-                  onClick={loadActivityLogs}
-                  disabled={activityLoading}
-                  className="px-3 py-1.5 text-xs font-bold text-brand border border-brand/30 rounded-lg hover:bg-brand/5 transition-colors"
-                >
-                  {activityLoading ? 'Loading...' : 'Refresh Logs'}
-                </button>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {activityLoading ? (
-                  <div className="p-12 text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand mx-auto"></div>
-                  </div>
-                ) : allActivityLogs.length > 0 ? (
-                  allActivityLogs.map((log) => (
-                    <div key={log.id} className="p-4 flex justify-between items-start hover:bg-gray-50 transition-colors">
-                      <div>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <p className="text-sm font-bold text-gray-900">{log.action?.replace(/_/g, ' ')}</p>
-                          <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
-                            {maskString(log.user_profiles?.full_name || log.user_profiles?.email || 'System User', 'name')}
+                        <span
+                          aria-hidden="true"
+                          className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-xs font-extrabold ${
+                            u.role === 'power_admin' ? 'bg-brand text-accent' : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {maskData ? '?' : initialsOf(u.full_name || u.email)}
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className={`block text-sm truncate ${active ? 'font-bold text-brand' : 'font-semibold text-gray-900'}`}>
+                            {mask(u.full_name || u.email, u.full_name ? 'name' : 'email')}
+                            {u.id === myId && <span className="font-normal text-gray-600"> (you)</span>}
                           </span>
-                        </div>
-                        <p className="text-xs text-gray-500">{log.details}</p>
-                      </div>
-                      <span className="text-[10px] font-medium text-gray-400 uppercase whitespace-nowrap ml-4">
-                        {formatTimeAgo(log.created_at)}
-                      </span>
+                          <span className="block text-xs text-gray-600 truncate">{getRoleDisplayName(u.role)}</span>
+                        </span>
+                        <span
+                          className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                            u.is_active ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {u.is_active ? 'Active' : 'Deactivated'}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+                {filtered.length === 0 && <li className="p-6 text-center text-sm text-gray-600">No users match.</li>}
+              </ul>
+            </section>
+
+            <section aria-label="User details" className={`scroll-panel relative flex-1 min-w-0 bg-white rounded-2xl ${selected ? 'block' : 'hidden md:block'}`}>
+              {!selected ? (
+                <div className="h-full flex items-center justify-center p-10 text-sm text-gray-600">Select a user to manage their role and access.</div>
+              ) : (
+                <div className="p-6 flex flex-col gap-6">
+                  <div className="flex items-center gap-4">
+                    <button type="button" onClick={() => setSelectedId(null)} className="md:hidden min-h-9 text-sm font-semibold text-brand">
+                      ←
+                    </button>
+                    <span aria-hidden="true" className="h-13 w-13 min-h-[52px] min-w-[52px] rounded-full bg-accent text-brand flex items-center justify-center text-lg font-extrabold">
+                      {maskData ? '?' : initialsOf(selected.full_name || selected.email)}
+                    </span>
+                    <div className="min-w-0">
+                      <h2 className="text-xl font-extrabold text-gray-900 truncate">{mask(selected.full_name || '(no name)', 'name')}</h2>
+                      <p className="text-sm text-gray-600 truncate">
+                        {mask(selected.email, 'email')} · joined {new Date(selected.created_at).toLocaleDateString('en-GB')}
+                      </p>
                     </div>
-                  ))
-                ) : (
-                  <div className="p-12 text-center text-gray-500">
-                    <p className="text-sm font-semibold">No activity logs recorded yet</p>
                   </div>
-                )}
-              </div>
-            </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+                    <label className={labelCls}>
+                      Role
+                      <select className={inputCls} value={editRole} onChange={(e) => setEditRole(e.target.value)}>
+                        {PRIMARY_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {getRoleDisplayName(r)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className={labelCls}>
+                      Status
+                      <select
+                        className={inputCls}
+                        value={editActive ? 'active' : 'inactive'}
+                        onChange={(e) => setEditActive(e.target.value === 'active')}
+                        disabled={isSelf}
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Deactivated</option>
+                      </select>
+                      {isSelf && <span className="font-normal text-gray-600">You can’t deactivate your own account.</span>}
+                    </label>
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-extrabold tracking-wider uppercase text-gray-600 mb-2">What this role can open</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {MODULES.map((m) => {
+                        const on = (permissions[editRole] ?? []).includes(m.id);
+                        return (
+                          <span
+                            key={m.id}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold ${on ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-500 line-through'}`}
+                          >
+                            {m.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="pt-5 border-t border-gray-100 flex flex-wrap gap-2.5">
+                    <button type="button" onClick={saveUser} disabled={busy || !dirty} className={btnPrimary}>
+                      Save changes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => runAction('reset-password', 'Password reset email sent.')}
+                      disabled={busy}
+                      className={btn}
+                    >
+                      Send password reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => runAction('force-logout', 'Signed out of all devices.')}
+                      disabled={busy}
+                      className={btn}
+                    >
+                      Sign out everywhere
+                    </button>
+                    {!isSelf &&
+                      (confirmDeactivate && selected.is_active ? (
+                        <span className="sm:ml-auto inline-flex gap-2">
+                          <button type="button" onClick={toggleActive} disabled={busy} className="min-h-11 px-4 rounded-xl bg-red-700 text-white text-sm font-semibold">
+                            Confirm deactivate
+                          </button>
+                          <button type="button" onClick={() => setConfirmDeactivate(false)} className={btn}>
+                            Cancel
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => (selected.is_active ? setConfirmDeactivate(true) : toggleActive())}
+                          disabled={busy}
+                          className={`sm:ml-auto min-h-11 px-4 rounded-xl border text-sm font-semibold disabled:opacity-50 ${
+                            selected.is_active ? 'border-red-200 text-red-700 hover:bg-red-50' : 'border-gray-200 text-brand hover:bg-gray-50'
+                          }`}
+                        >
+                          {selected.is_active ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </section>
           </div>
         )}
 
-        {/* Modal: + Create New User */}
-        {showCreateUserModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">+ Create New User Account</h3>
-                <button onClick={() => setShowCreateUserModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <form onSubmit={handleCreateUser} className="p-6 space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={createUserForm.fullName}
-                    onChange={(e) => setCreateUserForm(prev => ({ ...prev, fullName: e.target.value }))}
-                    placeholder="e.g. Jane Doe"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-brand focus:border-brand"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Email Address *</label>
-                  <input
-                    type="email"
-                    required
-                    value={createUserForm.email}
-                    onChange={(e) => setCreateUserForm(prev => ({ ...prev, email: e.target.value }))}
-                    placeholder="jane.doe@company.com"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-brand focus:border-brand"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Initial Password *</label>
-                  <input
-                    type="password"
-                    required
-                    value={createUserForm.password}
-                    onChange={(e) => setCreateUserForm(prev => ({ ...prev, password: e.target.value }))}
-                    placeholder="••••••••"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-brand focus:border-brand"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Security Role</label>
-                  <select
-                    value={createUserForm.role}
-                    onChange={(e) => setCreateUserForm(prev => ({ ...prev, role: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-brand focus:border-brand"
-                  >
-                    {PRIMARY_ROLES.map(roleKey => (
-                      <option key={roleKey} value={roleKey}>{getRoleDisplayName(roleKey)}</option>
+        {/* ---------------- Roles & permissions ---------------- */}
+        {section === 'roles' && (
+          <section aria-labelledby="roles-title" className="scroll-panel relative flex-1 min-h-0 bg-white rounded-2xl p-6 overflow-x-auto">
+            <h2 id="roles-title" className="text-base font-extrabold text-gray-900">
+              Roles &amp; permissions
+            </h2>
+            <p className="mt-1 mb-4 text-sm text-gray-600">
+              Preview only: changes here are not saved or enforced yet. Access is currently controlled by database security rules for each role.
+            </p>
+            <table className="w-full min-w-[720px] text-sm border-collapse">
+              <thead>
+                <tr>
+                  <th scope="col" className="text-left px-3 py-2.5 text-[11px] font-extrabold tracking-wider uppercase text-gray-600 border-b border-gray-100">
+                    Role
+                  </th>
+                  {MODULES.map((m) => (
+                    <th key={m.id} scope="col" className="px-3 py-2.5 text-[11px] font-extrabold tracking-wider uppercase text-gray-600 border-b border-gray-100">
+                      {m.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {PRIMARY_ROLES.map((role) => (
+                  <tr key={role} className="border-b border-gray-100 last:border-0">
+                    <th scope="row" className="text-left px-3 py-2.5 font-semibold text-gray-900">
+                      {getRoleDisplayName(role)}
+                    </th>
+                    {MODULES.map((m) => (
+                      <td key={m.id} className="px-3 py-2.5 text-center">
+                        <input
+                          type="checkbox"
+                          aria-label={`${getRoleDisplayName(role)} can open ${m.name}`}
+                          checked={(permissions[role] ?? []).includes(m.id)}
+                          onChange={() => togglePermission(role, m.id)}
+                          disabled={role === 'power_admin'}
+                          className="h-4 w-4 accent-brand"
+                        />
+                      </td>
                     ))}
-                  </select>
-                </div>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
 
-                <div className="flex gap-3 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateUserModal(false)}
-                    className="flex-1 py-2.5 text-xs font-bold text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors uppercase"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={actionLoading || !createUserForm.email || !createUserForm.password}
-                    className="flex-1 py-2.5 bg-brand text-white text-xs font-bold rounded-lg hover:opacity-90 shadow-sm transition-all uppercase disabled:opacity-50"
-                  >
-                    {actionLoading ? 'Creating...' : 'Create Account'}
-                  </button>
-                </div>
-              </form>
+        {/* ---------------- Anomaly engine ---------------- */}
+        {section === 'engine' && (
+          <section aria-labelledby="engine-title" className="bg-white rounded-2xl p-6 max-w-2xl flex flex-col gap-6">
+            <div>
+              <h2 id="engine-title" className="text-base font-extrabold text-gray-900">
+                Anomaly detection engine
+              </h2>
+              <p className="mt-1 text-sm text-gray-600">Controls how sensitive generation anomaly detection is.</p>
             </div>
-          </div>
+            <label className="flex items-center justify-between gap-4 p-4 rounded-xl bg-gray-50 cursor-pointer">
+              <span>
+                <span className="block text-sm font-bold text-gray-900">Anomaly alerts</span>
+                <span className="block text-xs text-gray-600">Turn detection on or off for everyone.</span>
+              </span>
+              <input type="checkbox" role="switch" checked={alertsEnabled} onChange={(e) => setAlertsEnabled(e.target.checked)} className="h-5 w-5 accent-brand" />
+            </label>
+            <label className={labelCls}>
+              Detection threshold (standard deviations)
+              <span className="flex items-center gap-3">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.5"
+                  max="5"
+                  value={threshold}
+                  onChange={(e) => setThreshold(e.target.value)}
+                  className={`${inputCls} w-32 text-center font-mono`}
+                />
+                <span className="font-normal text-gray-600">Lower values flag more alerts.</span>
+              </span>
+            </label>
+            <button type="button" onClick={saveEngine} disabled={busy} className={`${btnPrimary} self-start`}>
+              Save engine settings
+            </button>
+          </section>
+        )}
+
+        {/* ---------------- Audit log ---------------- */}
+        {section === 'audit' && (
+          <section aria-labelledby="audit-title" className="flex-1 min-h-0 bg-white rounded-2xl flex flex-col">
+            <div className="flex items-center justify-between gap-3 p-5 border-b border-gray-100">
+              <div>
+                <h2 id="audit-title" className="text-base font-extrabold text-gray-900">
+                  Audit log
+                </h2>
+                <p className="text-sm text-gray-600">The latest 100 actions across the platform.</p>
+              </div>
+              <button type="button" onClick={loadAudit} disabled={auditLoading} className={btn}>
+                {auditLoading ? 'Loading…' : 'Refresh'}
+              </button>
+            </div>
+            <div className="scroll-panel relative flex-1 min-h-0">
+              {auditError ? (
+                <p className="p-8 text-sm text-red-700">Could not load the audit log: {auditError}</p>
+              ) : !auditLoading && audit.length === 0 ? (
+                <p className="p-8 text-center text-sm text-gray-600">No activity recorded yet.</p>
+              ) : (
+                <ol>
+                  {audit.map((row) => (
+                    <li key={row.id} className="flex gap-4 px-5 py-3 border-b border-gray-100 last:border-0 text-sm">
+                      <time dateTime={row.created_at} className="w-36 shrink-0 font-mono text-xs text-gray-600 pt-0.5">
+                        {new Date(row.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+                      </time>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold text-gray-900">
+                          {(row.action ?? 'Activity').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}
+                          <span className="font-normal text-gray-600">
+                            {' · '}
+                            {mask(row.user_profiles?.full_name || row.user_profiles?.email || 'Unknown user', 'name')}
+                          </span>
+                        </span>
+                        {row.details && <span className="block text-xs text-gray-600">{row.details}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </section>
         )}
       </div>
+
+      {/* ---------------- Invite user dialog ---------------- */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-title"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setShowCreate(false);
+            }}
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl"
+          >
+            <div className="flex items-center justify-between px-6 pt-5">
+              <h2 id="create-title" className="text-lg font-extrabold text-gray-900">
+                Invite user
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                aria-label="Close"
+                className="h-11 w-11 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-900"
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={createUser} className="p-6 flex flex-col gap-4">
+              <label className={labelCls}>
+                Full name
+                <input
+                  autoFocus
+                  required
+                  className={inputCls}
+                  value={createForm.fullName}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, fullName: e.target.value }))}
+                />
+              </label>
+              <label className={labelCls}>
+                Email
+                <input
+                  type="email"
+                  required
+                  className={inputCls}
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                />
+              </label>
+              <label className={labelCls}>
+                Role
+                <select className={inputCls} value={createForm.role} onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}>
+                  {PRIMARY_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {getRoleDisplayName(r)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={labelCls}>
+                Temporary password
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                  className={inputCls}
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
+                />
+                <span className="font-normal text-gray-600">At least 6 characters. Share it securely; they can change it in Profile &amp; Settings.</span>
+              </label>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setShowCreate(false)} className={`${btn} flex-1`}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={busy} className={`${btnPrimary} flex-[2]`}>
+                  {busy ? 'Creating…' : 'Create user'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

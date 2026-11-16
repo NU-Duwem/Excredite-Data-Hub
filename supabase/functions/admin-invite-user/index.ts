@@ -84,7 +84,10 @@ Deno.serve(async (req: Request) => {
       email,
       password,
       email_confirm: true, // Skip email verification - admin-created accounts are trusted
-      user_metadata: { full_name: full_name || "", role },
+      user_metadata: { full_name: full_name || "" },
+      // Role lives in app_metadata: only the service role can set it, and the
+      // signup trigger (11_user_roles_lockdown.sql) reads it from there.
+      app_metadata: { role },
     });
 
     if (createError) {

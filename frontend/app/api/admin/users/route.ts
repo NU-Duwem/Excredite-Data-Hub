@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/utils/supabase/server';
+import { PRIMARY_ROLES } from '@/utils/roles';
+
+const VALID_ROLES: readonly string[] = PRIMARY_ROLES;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -38,6 +41,86 @@ export async function POST(req: Request) {
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
     switch (action) {
+      // ============================================
+      // CREATE USER
+      // The role goes in app_metadata (server-only); the signup trigger reads
+      // it from there, so a self-service signUp() can never pick its own role.
+      // ============================================
+      case 'create-user': {
+        const { email, password, fullName, role } = body;
+        if (!email || !password) {
+          return NextResponse.json({ error: 'email and password are required' }, { status: 400 });
+        }
+        if (typeof password !== 'string' || password.length < 6) {
+          return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
+        }
+        const newRole = role || 'power_team';
+        if (!VALID_ROLES.includes(newRole)) {
+          return NextResponse.json({ error: `Invalid role: ${newRole}` }, { status: 400 });
+        }
+
+        const { data: created, error } = await adminClient.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true, // admin-created accounts are trusted
+          user_metadata: { full_name: fullName || '' },
+          app_metadata: { role: newRole },
+        });
+        if (error || !created.user) {
+          return NextResponse.json({ error: error?.message || 'Could not create user' }, { status: 400 });
+        }
+
+        await adminClient.from('user_activity_log').insert({
+          user_id: auth.user.id,
+          action: 'ADMIN_CREATE_USER',
+          details: `Admin created user ${email} with role ${newRole}`,
+        });
+
+        return NextResponse.json({ success: true, userId: created.user.id, message: `User ${email} created.` });
+      }
+
+      // ============================================
+      // CHANGE ROLE
+      // ============================================
+      case 'set-role': {
+        if (!targetUserId || typeof value !== 'string' || !VALID_ROLES.includes(value)) {
+          return NextResponse.json({ error: 'targetUserId and a valid role are required' }, { status: 400 });
+        }
+
+        // Never leave the platform without an active admin.
+        if (value !== 'power_admin') {
+          const { data: target } = await adminClient.from('user_profiles').select('role').eq('id', targetUserId).single();
+          if (target?.role === 'power_admin') {
+            const { count } = await adminClient
+              .from('user_profiles')
+              .select('id', { count: 'exact', head: true })
+              .eq('role', 'power_admin')
+              .eq('is_active', true);
+            if ((count ?? 0) <= 1) {
+              return NextResponse.json({ error: 'This is the only active System Admin. Make someone else an admin first.' }, { status: 400 });
+            }
+          }
+        }
+
+        const { error } = await adminClient
+          .from('user_profiles')
+          .update({ role: value, updated_at: new Date().toISOString() })
+          .eq('id', targetUserId);
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        // Keep the auth record in step (server-only metadata).
+        await adminClient.auth.admin.updateUserById(targetUserId, { app_metadata: { role: value } });
+
+        await adminClient.from('user_activity_log').insert({
+          user_id: auth.user.id,
+          action: 'ADMIN_SET_ROLE',
+          details: `Admin changed role of user ${targetUserId} to ${value}`,
+        });
+
+        return NextResponse.json({ success: true, message: 'Role updated.' });
+      }
+
       // ============================================
       // RESET PASSWORD (force next-login reset)
       // ============================================
@@ -82,22 +165,12 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: 'targetUserId is required' }, { status: 400 });
         }
 
-        // Revoke all refresh tokens for the user via SQL
-        const { error } = await adminClient.rpc('force_logout_user', {
+        // Ends every session and refresh token (11_user_roles_lockdown.sql).
+        const { data: sessionsEnded, error } = await adminClient.rpc('force_logout_user', {
           target_user_id: targetUserId,
         });
-
-        // Fallback: if the RPC doesn't exist, sign out via admin API
         if (error) {
-          // Alternative: delete refresh tokens directly
-          const { error: sqlError } = await adminClient
-            .from('user_profiles')
-            .update({ updated_at: new Date().toISOString() })
-            .eq('id', targetUserId);
-
-          if (sqlError) {
-            return NextResponse.json({ error: sqlError.message }, { status: 500 });
-          }
+          return NextResponse.json({ error: `Could not sign the user out: ${error.message}` }, { status: 500 });
         }
 
         // Log the action
@@ -109,7 +182,8 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
           success: true,
-          message: 'User sessions have been invalidated. They will need to log in again.',
+          sessionsEnded,
+          message: `Signed out of ${sessionsEnded ?? 0} session(s). They will need to sign in again.`,
         });
       }
 
@@ -119,6 +193,9 @@ export async function POST(req: Request) {
       case 'set-status': {
         if (!targetUserId || typeof value !== 'boolean') {
           return NextResponse.json({ error: 'targetUserId and value (boolean) are required' }, { status: 400 });
+        }
+        if (!value && targetUserId === auth.user.id) {
+          return NextResponse.json({ error: 'You cannot deactivate your own account.' }, { status: 400 });
         }
 
         const { error } = await adminClient
@@ -130,11 +207,12 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        // If deactivating, also ban the user in Supabase Auth
+        // If deactivating, also ban the user in Supabase Auth and end their sessions
         if (!value) {
           await adminClient.auth.admin.updateUserById(targetUserId, {
             ban_duration: '876000h', // ~100 years
           });
+          await adminClient.rpc('force_logout_user', { target_user_id: targetUserId });
         } else {
           // Reactivate: unban
           await adminClient.auth.admin.updateUserById(targetUserId, {

@@ -16,8 +16,82 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-16 · Redesigned Profile, History, Admin Panel and Documents; role lockdown
+**Branch:** `dev` · **PR:** #8 · **Status:** Open
+
+**What and why:** These are the designs picked from the alternatives canvas. Profile & Settings uses the "Analyst table" design (C). Conversation History, Documents and Admin Panel use "Split view" (A). Anomaly Alerts and Regulatory & Advisory are unchanged. While wiring the pages to real data, several bugs and a serious security hole turned up, and they are fixed here too.
+
+**Security (migration 11, already applied to the live database):**
+- **Privilege escalation:** any signed-in user could make themselves `power_admin`, or reactivate their own account. The RLS policy "Users can update own profile (not role)" only checked that the row was theirs. Signed-in users can now update only `full_name` and `updated_at`.
+- **Signup trigger:** `handle_new_user()` trusted `raw_user_meta_data->>'role'`, which the person signing up controls. It now reads `raw_app_meta_data` (server-set only), and defaults to `power_team`.
+- **New `public.force_logout_user(uuid)`:** `SECURITY DEFINER`, `search_path = ''`, executable by `service_role` only. It deletes a user's sessions and refresh tokens.
+
+**Admin API (`/api/admin/users`):**
+- **New actions:**
+  - `create-user`: sets a confirmed email, the role in `app_metadata`, and a password of at least 6 characters.
+  - `set-role`: won't demote the last active admin.
+- **`force-logout`:** really signs the user out now. Before, it was a no-op that reported success.
+- **Deactivating** a user also signs them out. You can't deactivate yourself.
+- **Every action** is logged to the activity log.
+
+**Pages:**
+- **Profile & Settings:**
+  - Account, Password, Notifications and My activity, each with an "On this page" index.
+  - Your name is editable and saved.
+  - A password change checks your current password first.
+  - `?force_reset=true` shows a banner and jumps to Password.
+  - My activity shows your real last 20 activity-log entries. The mock rows are removed.
+- **Conversation History:**
+  - A list grouped by day sits next to the transcript, with search.
+  - The time-range filter now works.
+  - You can delete a conversation, with a confirm step.
+  - "Continue conversation" reopens the chat in AI Query (`/query?session=…`).
+  - The fake sample conversations are removed.
+- **Admin Panel:**
+  - Sections: Users, Roles & permissions, Anomaly engine, Audit log.
+  - Users is a list beside a detail panel, with role and status, what the role can open, and reset, sign-out and deactivate actions.
+  - "Invite user" now works.
+  - The roles matrix is marked preview only.
+  - Engine settings save through the API.
+  - The audit log reads the real activity log. Before, it read a table that doesn't exist and fell back to mock data.
+- **Documents:**
+  - The library opens by default, as a list beside the document workspace.
+  - Rows show file-type badges and status chips.
+  - "Generate document" and "Upload" move to the header.
+  - Upload and generation logic are unchanged.
+
+**Files:**
+- `11_user_roles_lockdown.sql` (new)
+- `README.md`
+- `frontend/app/api/admin/users/route.ts`
+- `frontend/app/{profile,history,admin,documents,query}/page.tsx`
+- `frontend/utils/chatSessions.ts` (new)
+- `frontend/utils/__tests__/chatSessions.test.ts` (new)
+- `supabase/functions/admin-invite-user/index.ts`
+
+**Manual steps:**
+- **Other databases:** run `11_user_roles_lockdown.sql` (the live project already has it).
+- **Redeploy the edge function:** `supabase functions deploy admin-invite-user`, so invited users get their role from `app_metadata`.
+- **Still pending:** the dashboard toggle "Prevent use of leaked passwords". It is the only security-advisor finding left.
+
+**Tested:**
+- **Migration 11, in rolled-back transactions on the live database:**
+  - A non-admin changing their role is refused.
+  - A name change works.
+  - Only `service_role` can call `force_logout_user`.
+  - Signup takes the role from `app_metadata`.
+- **Security advisor:** no new findings.
+- **Tests and build:** 151 Vitest tests pass, including 7 new `chatSessions` tests, and `next build` passes.
+- **Chromium, with a mocked Supabase:**
+  - Profile: the sections and the force-reset banner.
+  - History: day groups, the 7-day filter, delete, and continuing in AI Query.
+  - Admin: each action sends exactly the expected API calls.
+  - Documents: the library, the workspace and the upload view.
+
+---
+
 ## 2026-11-16 · Scrollable filter panel on News & Updates
-**Branch:** `dev` · **PR:** #7 · **Status:** Open
+**Branch:** `dev` · **PR:** #7 · **Status:** Merged
 
 **What and why:** On shorter screens the filter rail ran off the bottom of the window. It had no height limit, so the sources list, the last-pull line and Reset filters couldn't be reached. The drawer did scroll, but on macOS its scrollbar was hidden until you scrolled, so it didn't look scrollable.
 

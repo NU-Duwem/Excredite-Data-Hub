@@ -16,8 +16,85 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-16 · Regulatory & Advisory rebuilt as a work board with tasks
+**Branch:** `dev` · **PR:** #10 · **Status:** Open
+
+**What and why:** The section now holds the firm's jobs (current and closed), the tasks on each job with their dates, and who each task is assigned to: one person, or the whole team. This is design C, "Work board", from the Regulatory & Advisory canvas. Before, a job had only a free-text lead and a single deadline, and there were no tasks at all.
+
+**Database (migration 12, already applied to the live database):**
+- **New `matter_tasks` table:**
+  - holds title, notes, status (To do, In progress, In review, Done), start and due dates, and a sort position;
+  - the assignee is either a person or the whole team, never both, and the database enforces this;
+  - `completed_at` and `updated_at` are kept up to date automatically;
+  - the database rejects a due date before the start date.
+- **`matters.lead_user_id`:** the lead is now a real user. The old `lead_counsel` text is kept, so existing jobs still show their lead.
+- **Access:**
+  - The legal team, admins and the app can create and edit jobs and tasks. The legal team can now edit jobs; before, only admins and the app could.
+  - The CEO can view jobs and tasks but not change them.
+  - Other roles can't see them.
+- **New `list_matter_people()`:**
+  - returns only the names and roles of active admins, the CEO and the legal team, never emails, so the board can show who a task is assigned to;
+  - the lookup that needs elevated rights lives in the private schema (`private.matter_people()`), and the public function is a thin wrapper that runs with the caller's own rights;
+  - before this, non-admins couldn't read other people's profiles at all.
+
+**Page (`/matters`):**
+- **Job cards along the top**, starting with "All jobs". Each shows the reference, client, deadline, tasks done out of total, a progress bar and an overdue flag. Click one to show only its tasks.
+- **Selected job's details:** status, lead, opened date, deadline and notes, the documents linked to it, plus Edit job and Add task.
+- **Four columns:** To do, In progress, In review and Done.
+  - Each card shows its job, who it's assigned to (a person, "(you)", or a dark **Whole team** chip) and its dates. Overdue dates show in red as "was …".
+  - Drag a card to another column to change its status. On a phone, open the card and change the status there instead.
+- **Filters:** Everyone, My tasks (your tasks plus whole-team tasks), Whole team, Due this week, Overdue, and Show closed jobs.
+- **Task dialog:** add, edit or delete a task (deleting asks for confirmation), with clear messages when something is missing or the dates are wrong.
+- **Job dialog:**
+  - create or edit a job, choosing the client from the organisations list, the type, status, lead, opened date, deadline and notes;
+  - closing a job records the date it closed.
+- **Who sees what:** the CEO sees the board read-only, and other roles see a short "ask an admin for access" message.
+
+**Bugs fixed from the old page:**
+- **Role check:** it read the role from `user_metadata`, which is no longer used for roles since migration 11.
+- **Fake data:** it showed made-up matters whenever the database returned none.
+- **Deadline:** it showed a fixed date of 15 Aug 2026 instead of each job's real deadline.
+- **Creating a matter always failed:** it sent types like "Tariff Dispute", which the database rejects.
+
+**Files:**
+- `12_matter_tasks.sql` (new)
+- `README.md`
+- `frontend/app/matters/page.tsx`
+- `frontend/utils/matterTasks.ts` (new)
+- `frontend/utils/__tests__/matterTasks.test.ts` (new)
+- `Tracked-changes.md` (PR #9 marked Merged)
+
+**Manual steps:**
+- **Other databases:** run `12_matter_tasks.sql`. The live project already has it.
+- **Existing leads:** the three existing jobs have no `lead_user_id` yet, so they show their old typed lead name. Choose a real lead with Edit job when convenient.
+
+**Tested:**
+- **Access, checked live in rolled-back transactions:**
+  - the legal team can add, finish and reopen a task, and `completed_at` is set and cleared;
+  - the legal team can edit jobs;
+  - the CEO can read but not insert or update;
+  - an analyst sees no tasks and no people;
+  - anonymous visitors are blocked;
+  - "whole team plus a person" and a due date before the start date are both rejected.
+- **People lookup:** returns names without emails.
+- **Security advisor:** no new findings. Only the existing leaked-password setting remains.
+- **Tests and build:** 177 Vitest tests pass, including 16 new ones for the board's filters, sorting, progress, dates and form checks, and `next build` passes.
+- **Chromium, with an in-memory fake Supabase:**
+  - the job cards, columns, overdue display and assignee chips;
+  - every filter, and the show-closed toggle;
+  - job details and linked documents;
+  - adding a task from a column (job and status pre-filled), the title and date error messages, and editing to reassign and mark done;
+  - drag and drop, which sends a status-only update;
+  - delete with confirmation;
+  - creating a job, which then opens it, and closing a job, which sets the closed date;
+  - CEO read-only, with no edit buttons, no dragging, disabled fields and Escape to close;
+  - the analyst's no-access message;
+  - no sideways scrolling of the page at 390px.
+
+---
+
 ## 2026-11-16 · AI Query redesigned as a "report thread"
-**Branch:** `dev` · **PR:** #9 · **Status:** Open
+**Branch:** `dev` · **PR:** #9 · **Status:** Merged
 
 **What and why:** This is design B, "Report thread", from the AI Query canvas. The page was a plain chat; now each question and its answer form a numbered card (Q1, Q2…), which reads like a briefing and is easier to share.
 

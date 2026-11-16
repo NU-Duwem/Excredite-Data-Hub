@@ -43,7 +43,8 @@ To set up the database schema and RLS policies, execute the SQL files in your Su
 6. `09_security_hardening.sql` - Fixes the Supabase security advisor findings. After this, new SQL must call `private.get_user_role()`; `public.get_user_role()` no longer exists.
 7. `10_news_topics.sql` - Topic tags on news articles, used by the News & Updates filters.
 8. `11_user_roles_lockdown.sql` - Stops users changing their own role or status, takes the signup role only from server-set `app_metadata`, and adds `force_logout_user()` for the Admin Panel's "Sign out everywhere". Afterwards redeploy the `admin-invite-user` edge function (`supabase functions deploy admin-invite-user`).
-9. In the dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**. This is not available in SQL, and needs a paid Supabase plan.
+9. `12_matter_tasks.sql` - Tasks on Regulatory & Advisory jobs (the work board): the `matter_tasks` table, a job lead linked to a real user, `list_matter_people()` for assignee names, and edit rights on jobs and tasks for the legal team.
+10. In the dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**. This is not available in SQL, and needs a paid Supabase plan.
 
 ### 2. Frontend Setup
 Navigate to the frontend directory:

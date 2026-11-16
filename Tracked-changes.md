@@ -16,8 +16,41 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-16 · Project moved to its own repository
+**Branch:** `dev` · **PR:** pending · **Status:** Open
+
+**What and why:** The project now lives on its own in **NU-Duwem/Excredite-Data-Hub**. Before, it was **NU-Duwem/EPDH-UPDATED**, a fork of another repository; the move makes it standalone.
+
+**Changes:**
+- **Git history moved in full:**
+  - all 42 commits, from "first commit" on 11 May 2026 to the merge of PR #10;
+  - both branches, `main` and `dev`, pointing to the same commits as in the old repository;
+  - the old repository had no tags.
+- **README replaced:** the new repository's automatic "Initial commit" held only a README with the title `# Excredite-Data-Hub`. It was replaced by the project's `main`.
+- **PR numbers:** pull requests #1–#10 in the entries below belong to the old repository, at `https://github.com/NU-Duwem/EPDH-UPDATED/pull/<number>`. Pull requests in this repository start again from #1.
+- **No file changes needed:** nothing in the project referred to the old repository's name.
+- **Also in this commit:** the PR #10 entry is marked Merged.
+
+**Files:** `Tracked-changes.md`
+
+**Manual steps:**
+- **Repository settings,** which don't move with git: Actions secrets and variables, branch protection, webhooks and collaborators.
+- **Connected services:**
+  - point the Vercel project, and any Supabase GitHub integration, at this repository;
+  - install the Claude GitHub App on it.
+- **Local clones:** update each developer's remote:
+  `git remote set-url origin https://github.com/NU-Duwem/Excredite-Data-Hub.git`
+- **Old repository:** archive or delete it once you're happy with the move. Its pull requests stay readable only while it exists.
+
+**Tested:**
+- **Branch heads:** `git ls-remote` shows identical `main` (`e2c42fd`) and `dev` (`d52315c`) in both repositories.
+- **History:** a fresh bare clone of the new repository has all 42 commits.
+- **Integrity:** `git fsck` reports no errors.
+
+---
+
 ## 2026-11-16 · Regulatory & Advisory rebuilt as a work board with tasks
-**Branch:** `dev` · **PR:** #10 · **Status:** Open
+**Branch:** `dev` · **PR:** #10 · **Status:** Merged
 
 **What and why:** The section now holds the firm's jobs (current and closed), the tasks on each job with their dates, and who each task is assigned to: one person, or the whole team. This is design C, "Work board", from the Regulatory & Advisory canvas. Before, a job had only a free-text lead and a single deadline, and there were no tasks at all.
 

@@ -16,8 +16,60 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-16 · AI Query redesigned as a "report thread"
+**Branch:** `dev` · **PR:** pending · **Status:** Open
+
+**What and why:** This is design B, "Report thread", from the AI Query canvas. The page was a plain chat; now each question and its answer form a numbered card (Q1, Q2…), which reads like a briefing and is easier to share.
+
+**Changes:**
+- **Layout:**
+  - One centred column with a header showing the conversation's first question and how many questions it has, plus **History** and **New conversation**.
+  - The question box sits at the bottom, with shortcuts to Upload, Library, Document Generator, Legal Matters and News. These replace the old Documents dropdown and link chips.
+  - The latest card has an amber outline.
+- **Starting screen:** "What do you need to know?" with four starter questions (Generation, News, Legal, Documents). Clicking one asks it straight away.
+- **Answer actions that now work.** Before, these buttons did nothing:
+  - **Copy** copies the question and answer, then shows "Copied".
+  - **Download PDF** opens the browser's print dialog for a clean, branded page holding just that answer. Choose "Save as PDF" there.
+  - **Turn into document** opens the Document Generator with the question already filled in as the title (new `?title=` parameter).
+- **Document notice:**
+  - It now appears inside the card of the question that asked for a document.
+  - It's worded honestly: "Make this a document" opens the Generator. The old "Output ready" claim was wrong, because the chat doesn't create files.
+- **Unchanged behaviour:**
+  - questions handed over from Overview (`?q=`);
+  - reopening conversations from History (`?session=`);
+  - saving to this browser;
+  - the `/api/chat` call;
+  - Enter to send, Shift+Enter for a new line.
+- **Answer safety:** text in answers is escaped, so they can't inject HTML, including in the printed PDF.
+
+**Files:**
+- `frontend/app/query/page.tsx`
+- `frontend/app/documents/page.tsx` (fills in the Generator title from `?title=`)
+- `frontend/utils/queryTurns.ts` (new)
+- `frontend/utils/__tests__/queryTurns.test.ts` (new)
+
+**Manual steps:** none.
+
+**Tested:**
+- **Tests:** 161 Vitest tests pass, including 10 new `queryTurns` tests: question/answer pairing, escaping, Markdown to HTML, and the printable page.
+- **Build and lint:** `next build` passes, the query page lints clean, and the Documents page's lint count is unchanged (28 findings that were already there).
+- **Chromium, with a mocked Supabase and chat API:**
+  - the starting screen and its four starters;
+  - the loading state;
+  - Q1 and Q2 cards with the outline on the latest;
+  - the follow-up sends the full history;
+  - the document notice appears only on the card that asked;
+  - Copy fills the clipboard and shows "Copied";
+  - the print page has the escaped answer;
+  - the conversation is saved for History;
+  - "Turn into document" fills in the Generator title;
+  - reopening from History, New conversation, and the `?q=` handover (asked exactly once);
+  - no sideways scrolling at 390px.
+
+---
+
 ## 2026-11-16 · Redesigned Profile, History, Admin Panel and Documents; role lockdown
-**Branch:** `dev` · **PR:** #8 · **Status:** Open
+**Branch:** `dev` · **PR:** #8 · **Status:** Merged
 
 **What and why:** These are the designs picked from the alternatives canvas. Profile & Settings uses the "Analyst table" design (C). Conversation History, Documents and Admin Panel use "Split view" (A). Anomaly Alerts and Regulatory & Advisory are unchanged. While wiring the pages to real data, several bugs and a serious security hole turned up, and they are fixed here too.
 

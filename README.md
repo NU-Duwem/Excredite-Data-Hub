@@ -79,6 +79,29 @@ cd frontend
 npm test
 ```
 
+### 6. Bulk document import (for the AI)
+Run this on the computer that holds the documents, from the `frontend` folder, with `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `frontend/.env.local`.
+
+1. **Dry run first.** It reads and measures every file, and nothing is uploaded or saved:
+   `npm run import-docs -- "C:\path\to\folder" --dry-run`
+   It reports:
+   - files ready to import, files already imported, files that need OCR (scanned), and unsupported files;
+   - pages without text;
+   - chunks, estimated database space and estimated storage space.
+2. **Start small:** `npm run import-docs -- "C:\path\to\folder" --limit 5`
+3. **Then the rest:** run it again without `--limit`. Files already imported are skipped by their content, so a stopped run can be restarted.
+
+**Useful options:**
+- `--classification PUBLIC|INTERNAL|LEGAL_PRIVILEGED`
+- `--type REGULATORY_ORDER|COURT_JUDGMENT|…` (by default it's guessed from the file name)
+- `--restricted`
+- `--text-only`, which skips uploading the originals and saves storage on the Free plan
+- `--help`
+
+**What the tool reads:** PDF (page by page), Word `.docx`, PowerPoint `.pptx` (slide by slide), Excel `.xlsx`/`.xls`, `.csv`, `.txt` and `.md`. Old `.doc`/`.ppt` files must first be saved in the newer format. Scanned pages are reported but not read yet (OCR is a later step).
+
+**First run:** it downloads the free `gte-small` model (~34 MB). Each run writes a JSON report.
+
 ### 5. News ingestion (RSS)
 1. Run `07_news_ingestion.sql`, then `08_news_schedule.sql`, in the Supabase SQL Editor. Together they:
    - create `news_sources` and seed the feed list;

@@ -79,9 +79,17 @@ Each person's Microsoft 365 address must be exactly the same as their EPDH email
    The login page then shows only the **Sign in with email** button; the password form disappears.
 5. **Test it.** Click **Sign in with email** as one person and sign in on the Microsoft screen that follows. Then open **Profile & Settings**: **Sign-in method** should read "Excredite work email or Email and password", and the role and history should be unchanged.
 
-6. **Retire passwords:** once all five people have signed in successfully with the button, go to **Authentication → Sign In / Providers → Email** and turn off email-and-password sign-in. After that, the work-email button is the only way in. (The login page already hides the password form whenever `NEXT_PUBLIC_MICROSOFT_SIGN_IN=true`.)
+6. **Retire old passwords.** Once all five people have signed in successfully with the button, run this in the Supabase **SQL Editor**. It replaces everyone's old EPDH password with a random one that nobody knows:
 
-**Adding someone new later:** an EPDH admin creates them in the **Admin Panel** with their exact Microsoft 365 address. That puts the address on the allowed list, and they can then use **Sign in with email** straight away.
+   ```sql
+   UPDATE auth.users
+   SET encrypted_password = extensions.crypt(encode(extensions.gen_random_bytes(32), 'base64'), extensions.gen_salt('bf'))
+   WHERE lower(email) IN (SELECT email FROM public.allowed_accounts);
+   ```
+
+   After that, the only ways in are **Sign in with email** and, once, a temporary password. **Leave Supabase's Email sign-in setting switched on:** temporary passwords need it to start the session, even though nobody uses a normal password any more.
+
+**Adding someone new later:** an EPDH admin uses **Add user** in the **Admin Panel** with the person's exact Microsoft 365 address. That puts the address on the allowed list and shows a **temporary password** once. Give it to the person in person or by phone. It works for their **first sign-in only**, for 3 days; on the login page they choose **First time? Use a temporary password**. After that they use **Sign in with email**. If it expires, or they mistype it 5 times, click **Issue temporary password** in their details to make a new one; the old one stops working.
 
 ---
 

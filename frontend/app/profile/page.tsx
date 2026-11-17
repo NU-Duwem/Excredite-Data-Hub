@@ -97,6 +97,8 @@ export default function ProfilePage() {
   // Password
   const [isForceReset, setIsForceReset] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
+  // Signed in once with a temporary password: choose a password without knowing a current one.
+  const [mustSetPassword, setMustSetPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -110,7 +112,8 @@ export default function ProfilePage() {
 
   useEffect(() => {
     let active = true;
-    const forceReset = new URLSearchParams(window.location.search).get('force_reset') === 'true';
+    const params = new URLSearchParams(window.location.search);
+    const forceReset = params.get('force_reset') === 'true' || params.get('first_sign_in') === '1';
 
     (async () => {
       const {
@@ -138,9 +141,10 @@ export default function ProfilePage() {
       setSavedName(name);
       setNameDraft(name);
       setActivity((logs ?? []) as ActivityRow[]);
-      setIsForceReset(forceReset);
+      setIsForceReset(forceReset || !!u.app_metadata?.must_set_password);
+      setMustSetPassword(!!u.app_metadata?.must_set_password);
       setLoading(false);
-      if (forceReset) {
+      if (forceReset || u.app_metadata?.must_set_password) {
         setActiveSection('password');
         window.setTimeout(() => document.getElementById('password')?.scrollIntoView({ block: 'start' }), 0);
       }
@@ -196,17 +200,19 @@ export default function ProfilePage() {
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!currentPassword) return setPasswordStatus({ kind: 'error', text: 'Enter your current password.' });
+    if (!mustSetPassword && !currentPassword) return setPasswordStatus({ kind: 'error', text: 'Enter your current password.' });
     if (newPassword.length < 6) return setPasswordStatus({ kind: 'error', text: 'The new password must be at least 6 characters.' });
     if (newPassword !== confirmPassword) return setPasswordStatus({ kind: 'error', text: 'The new passwords do not match.' });
 
     setPasswordSaving(true);
-    setPasswordStatus({ kind: 'info', text: 'Checking your current password…' });
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email: user.email ?? '', password: currentPassword });
-    if (signInError) {
-      setPasswordStatus({ kind: 'error', text: 'Your current password is incorrect.' });
-      setPasswordSaving(false);
-      return;
+    if (!mustSetPassword) {
+      setPasswordStatus({ kind: 'info', text: 'Checking your current password…' });
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: user.email ?? '', password: currentPassword });
+      if (signInError) {
+        setPasswordStatus({ kind: 'error', text: 'Your current password is incorrect.' });
+        setPasswordSaving(false);
+        return;
+      }
     }
 
     setPasswordStatus({ kind: 'info', text: 'Updating password…' });
@@ -219,7 +225,12 @@ export default function ProfilePage() {
       setNewPassword('');
       setConfirmPassword('');
       setIsForceReset(false);
-      await logActivity('PASSWORD_CHANGED', 'User changed their password.');
+      if (mustSetPassword) {
+        await fetch('/api/auth/password-chosen', { method: 'POST' });
+        await supabase.auth.refreshSession();
+        setMustSetPassword(false);
+      }
+      await logActivity('PASSWORD_CHANGED', mustSetPassword ? 'Chose a password after first sign-in.' : 'User changed their password.');
     }
     setPasswordSaving(false);
   };
@@ -252,7 +263,9 @@ export default function ProfilePage() {
 
         {isForceReset && (
           <div role="alert" className="rounded-xl bg-accent-soft text-accent-ink px-4 py-3 text-sm font-medium">
-            Your administrator asked you to set a new password before continuing. Use the Password section below.
+            {mustSetPassword
+              ? 'Welcome to EPDH. Your temporary password has now been used up, so choose your own password in the Password section below. You’ll need it next time you sign in.'
+              : 'Your administrator asked you to set a new password before continuing. Use the Password section below.'}
           </div>
         )}
 
@@ -320,10 +333,12 @@ export default function ProfilePage() {
 
             <Section id="password" title="Password" desc="Your current password is checked first. Changing it signs out your other devices.">
               <form onSubmit={handleUpdatePassword} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <label className={labelCls}>
-                  Current password
-                  <input type="password" className={inputCls} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} autoComplete="current-password" required />
-                </label>
+                {!mustSetPassword && (
+                  <label className={labelCls}>
+                    Current password
+                    <input type="password" className={inputCls} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} autoComplete="current-password" required />
+                  </label>
+                )}
                 <label className={labelCls}>
                   New password
                   <input type="password" className={inputCls} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" minLength={6} required />
@@ -345,7 +360,7 @@ export default function ProfilePage() {
                 <div className="lg:col-span-3 flex flex-wrap items-center gap-4">
                   <button
                     type="submit"
-                    disabled={passwordSaving || !currentPassword || !newPassword || mismatch}
+                    disabled={passwordSaving || (!mustSetPassword && !currentPassword) || !newPassword || mismatch}
                     className="min-h-11 px-5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-hover disabled:opacity-50"
                   >
                     {passwordSaving ? 'Updating…' : 'Update password'}

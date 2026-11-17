@@ -16,6 +16,76 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · One-time temporary passwords; login page redesign; visible Sign out
+**Branch:** `dev` · **PR:** #7 · **Status:** Open
+
+**What and why:** You asked for:
+- a temporary password option, as in the earlier setup, that works only for a person's first sign-in;
+- a redesigned login page;
+- a visible Sign out button once signed in.
+
+On phones the sidebar is hidden, so until now there was no way to sign out, or to move between pages.
+
+**Changes:**
+- **Temporary passwords** (`19_temporary_passwords.sql`, already applied):
+  - **Storage:** a server-only `public.temporary_passwords` table holding bcrypt hashes only.
+  - **Server functions:** `issue_temporary_password()` and `redeem_temporary_password()`. Only the service role can run them; signed-in users and the public API can't.
+  - **Rules:**
+    - a password works **once**: it is checked and spent in one step;
+    - it expires after 3 days (the database allows at most 30);
+    - it locks after 5 wrong tries;
+    - it only works for an active account on the allowed list;
+    - issuing a new one replaces the old one.
+  - **Server routes:**
+    - `/api/auth/temporary-sign-in` checks the password, then starts the session with a single-use token it creates itself. No email is sent.
+    - Until Sign in with email is switched on, the person is then asked to choose their own password, with no current password needed. `/api/auth/password-chosen` clears that request once they have.
+  - **Admin Panel:**
+    - **Add user** generates a readable temporary password (for example `kfx7-Qm3r-Tb9w`), or accepts one the admin types (at least 10 characters). It's shown **once**, with a copy button and instructions.
+    - **Issue temporary password** replaces **Send password reset** in each person's details.
+    - **Add user** asks for the work email and says it grants access.
+    - New users get a random Supabase password that nobody knows.
+- **Login page redesign:**
+  - **Computers:** two panels. On the left, Excredite green with the mark, "Nigeria's power sector, in one place." and three lines on what EPDH is. On the right, a clean sign-in card.
+  - **Phones:** a single column with the wordmark.
+  - **The card:**
+    - **Sign in with email** once Microsoft 365 is switched on; until then, work email and password (with a **Forgot?** link and a **Show** button for the password);
+    - **First time? Use a temporary password** opens the first sign-in form, with **Back to sign in**;
+    - clear error and "You've signed out" messages.
+- **Sign out:**
+  - **Computers:** a full-width, outlined **Sign out** button under your name in the sidebar (an icon with a label when the sidebar is collapsed).
+  - **Phones:** a new top bar with **Menu** (all pages), the logo, your picture and **Sign out**.
+  - Signing out returns to the login page with "You've signed out".
+- **Setup guide:** step 6 now scrambles everyone's old passwords with SQL instead of turning off email sign-in, because temporary passwords need it. It also explains adding people with temporary passwords. README updated.
+
+**Files:**
+- **Database:** `19_temporary_passwords.sql`.
+- **Pages:** `frontend/app/login/page.tsx`, `frontend/app/components/Sidebar.tsx`, `frontend/app/layout.tsx`, `frontend/app/admin/page.tsx`, `frontend/app/profile/page.tsx`.
+- **Server:** `frontend/app/api/auth/temporary-sign-in/route.ts`, `frontend/app/api/auth/password-chosen/route.ts`, `frontend/app/api/admin/users/route.ts`.
+- **Helpers and tests:** `frontend/utils/tempPassword.ts`, `frontend/utils/__tests__/tempPassword.test.ts`.
+- **Docs:** `docs/technical/microsoft-365-sign-in.md`, `README.md`, `Tracked-changes.md`.
+
+**Manual steps:** none. The SQL is already applied. To start someone off, use **Add user** or **Issue temporary password** in the Admin Panel.
+
+**Testing:**
+- **Unit tests:** 226 pass, 1 skipped. New tests cover the password format and uniqueness, the checks on admin-typed passwords, and the random hidden passwords.
+- **Code checks:** TypeScript is clean, with no new lint problems.
+- **Build:** `next build --webpack` succeeds.
+- **Live database checks, rolled back afterwards:**
+  - only a hash is stored;
+  - a wrong password fails, the right one works once, and a second use fails;
+  - 5 wrong tries lock it;
+  - expired passwords and deactivated accounts are refused, and short passwords can't be issued;
+  - signed-in and anonymous users can't call the functions.
+- **Screenshots against a fake Supabase server:**
+  - the login page on a computer and a phone, including the temporary-password form;
+  - Profile & Settings with the sidebar **Sign out**;
+  - the phone top bar and menu;
+  - **Sign out** returns to `/login?signed_out=1`.
+- **Not tested end to end:** the full temporary-password sign-in, because it needs the real service-role key, which I don't hold. Please try it once with **Issue temporary password** on a test account.
+- **Security advisor:** no new findings.
+
+---
+
 ## 2026-11-18 · Team photos; "Sign in with email"; only listed staff can sign in
 **Branch:** `dev` · **PR:** #7 · **Status:** Open
 

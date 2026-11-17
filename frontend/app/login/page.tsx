@@ -1,33 +1,95 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { createClient } from '@/utils/supabase/client';
-import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { MICROSOFT_SIGN_IN_ENABLED } from '@/utils/authRedirect';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { createClient } from '@/utils/supabase/client';
+import { MICROSOFT_SIGN_IN_ENABLED, safeNextPath } from '@/utils/authRedirect';
+
+type Mode = 'main' | 'temporary';
+
+const inputCls =
+  'w-full min-h-12 rounded-xl border border-gray-300 bg-white px-4 text-[15px] text-gray-900 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/30';
+const labelCls = 'block text-sm font-semibold text-gray-800 mb-1.5';
+const primaryBtn =
+  'w-full min-h-12 inline-flex items-center justify-center gap-2.5 rounded-xl bg-brand px-4 text-[15px] font-semibold text-white hover:bg-brand-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand disabled:opacity-60 transition-colors';
+
+function Spinner() {
+  return <span aria-hidden="true" className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />;
+}
+
+function MailIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="m3 7 9 6 9-6" />
+    </svg>
+  );
+}
+
+function PasswordInput({
+  id,
+  value,
+  onChange,
+  autoComplete,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete: string;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        type={show ? 'text' : 'password'}
+        autoComplete={autoComplete}
+        required
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${inputCls} pr-20`}
+        spellCheck={false}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        aria-pressed={show}
+        aria-label={show ? 'Hide password' : 'Show password'}
+        className="absolute inset-y-1.5 right-1.5 px-3 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+      >
+        {show ? 'Hide' : 'Show'}
+      </button>
+    </div>
+  );
+}
 
 function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const supabase = createClient();
+  const next = safeNextPath(searchParams.get('next'));
+
+  const [mode, setMode] = useState<Mode>('main');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState<null | 'work' | 'password' | 'temporary'>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [msLoading, setMsLoading] = useState(false);
-  const router = useRouter();
-  const supabase = createClient();
 
-  // Errors sent back by /auth/callback (e.g. a Microsoft sign-in that didn't finish),
-  // shown until the person tries again.
-  const searchParams = useSearchParams();
-  const [retried, setRetried] = useState(false);
-  const callbackError = retried ? null : searchParams.get('error')?.slice(0, 300) ?? null;
+  // Messages sent back by /auth/callback or sign-out, shown until the person tries again.
+  const [touched, setTouched] = useState(false);
+  const callbackError = touched ? null : searchParams.get('error')?.slice(0, 300) ?? null;
+  const signedOut = !touched && searchParams.get('signed_out') === '1';
   const shownError = error ?? callbackError;
 
-  const handleMicrosoft = async () => {
-    setRetried(true);
-    setMsLoading(true);
+  const start = (kind: 'work' | 'password' | 'temporary') => {
+    setTouched(true);
     setError(null);
-    const next = searchParams.get('next') ?? '/query';
+    setBusy(kind);
+  };
+
+  const signInWithWorkEmail = async () => {
+    start('work');
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'azure',
       options: {
@@ -35,175 +97,231 @@ function LoginForm() {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
-    // On success the browser leaves for Microsoft; we only get here on failure.
+    // On success the browser leaves this page; we only get here on failure.
     if (error) {
       setError('Sign-in with email is not available right now. Please try again shortly.');
-      setMsLoading(false);
+      setBusy(null);
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const signInWithPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setRetried(true);
-    setIsLoading(true);
-    setError(null);
+    start('password');
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error || !data.session) {
+      setError(error?.message === 'Invalid login credentials' ? 'That email or password is wrong.' : error?.message || 'Could not sign you in.');
+      setBusy(null);
+      return;
+    }
+    await supabase.from('user_activity_log').insert({ user_id: data.session.user.id, action: 'LOGIN', details: 'User logged in successfully.' });
+    router.push(next);
+    router.refresh();
+  };
 
+  const signInWithTemporaryPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    start('temporary');
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const res = await fetch('/api/auth/temporary-sign-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
       });
-
-      if (error) {
-        setError(error.message);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(json.error || 'Could not sign you in.');
+        setBusy(null);
         return;
       }
-
-      if (data.session) {
-        // Log successful login to activity table (swallows error if table not yet migrated)
-        await supabase
-          .from('user_activity_log')
-          .insert({
-            user_id: data.session.user.id,
-            action: 'LOGIN',
-            details: 'User logged in successfully.',
-          });
-
-        router.push('/query');
-        router.refresh();
-      }
-    } catch (err) {
-      setError('An unexpected error occurred during login.');
-    } finally {
-      setIsLoading(false);
+      router.push(json.next || '/');
+      router.refresh();
+    } catch {
+      setError('Could not reach EPDH. Check your connection and try again.');
+      setBusy(null);
     }
   };
 
-  const errorPanel = shownError ? (
-    <div role="alert" className="rounded-md bg-red-50 p-4 border border-red-100">
-      <h3 className="text-sm font-medium text-red-800">Could not sign you in</h3>
-      <p className="mt-2 text-sm text-red-700">{shownError}</p>
-    </div>
-  ) : null;
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setTouched(true);
+    setError(null);
+    setPassword('');
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 w-full">
-      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-lg border border-gray-100">
-        <div>
+    <div className="min-h-dvh w-full flex bg-gray-50">
+      {/* Brand panel (desktop) */}
+      <aside className="hidden lg:flex w-[44%] max-w-[620px] flex-col justify-between bg-brand text-white p-12 relative overflow-hidden">
+        <div aria-hidden="true" className="absolute -right-24 -bottom-24 h-96 w-96 rounded-full bg-white/[0.04]" />
+        <div aria-hidden="true" className="absolute left-12 bottom-28 h-1 w-16 rounded-full bg-accent" />
+        <div aria-hidden="true" className="absolute -right-10 top-24 h-40 w-40 rounded-full border-[18px] border-white/5" />
+        <div className="relative flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/excredite-wordmark.png" alt="Excredite" width={180} height={35} className="mx-auto h-auto w-[180px]" />
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 tracking-tight">
-            Excredite Electricity Data Hub
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Secure administrative access only
-          </p>
-        </div>
-        
-        {MICROSOFT_SIGN_IN_ENABLED && (
-          <div className="mt-8 space-y-4">
-            <button
-              type="button"
-              onClick={handleMicrosoft}
-              disabled={msLoading}
-              className="w-full min-h-12 flex items-center justify-center gap-3 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand disabled:opacity-50 shadow-sm"
-            >
-              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="m3 7 9 6 9-6" />
-              </svg>
-              {msLoading ? 'Opening sign-in…' : 'Sign in with email'}
-            </button>
-            <p className="text-center text-xs text-gray-600">Use your Excredite work email (@excredite.ng).</p>
-            {errorPanel}
+          <img src="/excredite-mark.png" alt="" width={44} height={44} className="h-11 w-11 rounded-xl bg-white p-1" />
+          <div className="leading-tight">
+            <p className="text-lg font-extrabold tracking-tight">Excredite</p>
+            <p className="text-sm text-white/70">Electricity Data Hub</p>
           </div>
-        )}
+        </div>
 
-        {!MICROSOFT_SIGN_IN_ENABLED && (
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          <div className="rounded-md shadow-sm space-y-4">
-            <div>
-              <label htmlFor="email-address" className="block text-sm font-medium text-gray-700 mb-1">
-                Email address
-              </label>
-              <input
-                id="email-address"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-brand focus:border-brand focus:z-10 sm:text-sm"
-                placeholder="you@excredite.ng"
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-brand focus:border-brand focus:z-10 sm:text-sm pr-10"
-                  placeholder="••••••••"
-                />
+        <div className="relative max-w-md">
+          <h1 className="text-4xl font-extrabold leading-tight tracking-tight">
+            Nigeria’s power sector, <span className="text-accent">in one place.</span>
+          </h1>
+          <ul className="mt-8 space-y-4 text-[15px] text-white/85">
+            {[
+              'Answers from the firm’s own orders, judgments and reports, with sources.',
+              'News, alerts and the regulatory work board, kept current for the team.',
+              'Private to Excredite: only listed staff can sign in.',
+            ].map((t) => (
+              <li key={t} className="flex gap-3">
+                <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="relative text-xs text-white/60">© {new Date().getFullYear()} Excredite. Confidential.</p>
+      </aside>
+
+      {/* Sign-in panel */}
+      <main className="flex-1 flex items-center justify-center px-4 py-10 sm:px-8">
+        <div className="w-full max-w-[400px]">
+          <div className="lg:hidden mb-8 text-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/excredite-wordmark.png" alt="Excredite" width={170} height={33} className="mx-auto h-auto w-[170px]" />
+            <p className="mt-2 text-sm font-semibold text-gray-600">Electricity Data Hub</p>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(10,58,34,0.06),0_12px_32px_-12px_rgba(10,58,34,0.18)] p-7 sm:p-9">
+            {mode === 'main' ? (
+              <>
+                <h2 className="text-2xl font-extrabold tracking-tight text-gray-900">Sign in</h2>
+                <p className="mt-1.5 text-sm text-gray-600">Use your Excredite work email (@excredite.ng).</p>
+              </>
+            ) : (
+              <>
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                  onClick={() => switchMode('main')}
+                  className="-ml-2 mb-3 min-h-9 px-2 rounded-lg text-sm font-semibold text-brand hover:bg-gray-50"
                 >
-                  {showPassword ? (
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
-                    </svg>
-                  ) : (
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  )}
+                  ← Back to sign in
+                </button>
+                <h2 className="text-2xl font-extrabold tracking-tight text-gray-900">First sign-in</h2>
+                <p className="mt-1.5 text-sm text-gray-600">
+                  Enter the temporary password an EPDH admin gave you. It works once; after that, use{' '}
+                  {MICROSOFT_SIGN_IN_ENABLED ? 'Sign in with email' : 'the password you’ll choose next'}.
+                </p>
+              </>
+            )}
+
+            {signedOut && mode === 'main' && (
+              <p role="status" className="mt-5 rounded-xl bg-brand/10 px-4 py-3 text-sm font-medium text-brand">
+                You’ve signed out.
+              </p>
+            )}
+
+            {shownError && (
+              <div role="alert" className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3">
+                <p className="text-sm font-semibold text-red-800">Could not sign you in</p>
+                <p className="mt-0.5 text-sm text-red-700">{shownError}</p>
+              </div>
+            )}
+
+            {mode === 'main' && MICROSOFT_SIGN_IN_ENABLED && (
+              <div className="mt-6">
+                <button type="button" onClick={signInWithWorkEmail} disabled={busy !== null} className={primaryBtn}>
+                  {busy === 'work' ? <Spinner /> : <MailIcon />}
+                  {busy === 'work' ? 'Opening sign-in…' : 'Sign in with email'}
                 </button>
               </div>
-            </div>
+            )}
+
+            {mode === 'main' && !MICROSOFT_SIGN_IN_ENABLED && (
+              <form onSubmit={signInWithPassword} className="mt-6 space-y-4">
+                <div>
+                  <label htmlFor="email" className={labelCls}>
+                    Work email
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@excredite.ng"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <div className="flex items-baseline justify-between">
+                    <label htmlFor="password" className={labelCls}>
+                      Password
+                    </label>
+                    <Link href="/forgot-password" className="text-sm font-semibold text-brand hover:underline">
+                      Forgot?
+                    </Link>
+                  </div>
+                  <PasswordInput id="password" value={password} onChange={setPassword} autoComplete="current-password" />
+                </div>
+                <button type="submit" disabled={busy !== null} className={primaryBtn}>
+                  {busy === 'password' && <Spinner />}
+                  {busy === 'password' ? 'Signing in…' : 'Sign in'}
+                </button>
+              </form>
+            )}
+
+            {mode === 'temporary' && (
+              <form onSubmit={signInWithTemporaryPassword} className="mt-6 space-y-4">
+                <div>
+                  <label htmlFor="temp-email" className={labelCls}>
+                    Work email
+                  </label>
+                  <input
+                    id="temp-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@excredite.ng"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="temp-password" className={labelCls}>
+                    Temporary password
+                  </label>
+                  <PasswordInput id="temp-password" value={password} onChange={setPassword} autoComplete="one-time-code" />
+                </div>
+                <button type="submit" disabled={busy !== null} className={primaryBtn}>
+                  {busy === 'temporary' && <Spinner />}
+                  {busy === 'temporary' ? 'Checking…' : 'Continue'}
+                </button>
+              </form>
+            )}
+
+            {mode === 'main' && (
+              <div className="mt-6 pt-5 border-t border-gray-100 text-center">
+                <button
+                  type="button"
+                  onClick={() => switchMode('temporary')}
+                  className="min-h-10 px-3 rounded-lg text-sm font-semibold text-brand hover:bg-gray-50"
+                >
+                  First time? Use a temporary password
+                </button>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center text-xs font-semibold px-1">
-            <Link href="/forgot-password" className="text-brand hover:underline font-bold">
-              Forgot password?
-            </Link>
-          </div>
-
-          {errorPanel}
-
-          <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-2.5 px-4 border border-transparent text-sm font-semibold rounded-lg text-white bg-brand hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand disabled:opacity-50 transition-all shadow-sm"
-            >
-              {isLoading ? (
-                <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Signing in...
-                </span>
-              ) : (
-                'Sign in to EPDH'
-              )}
-            </button>
-          </div>
-        </form>
-        )}
-      </div>
+          <p className="mt-6 text-center text-xs text-gray-600">
+            Trouble signing in? Ask an EPDH admin. Access is limited to listed Excredite staff.
+          </p>
+        </div>
+      </main>
     </div>
   );
 }

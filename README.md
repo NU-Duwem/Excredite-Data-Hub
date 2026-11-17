@@ -95,6 +95,7 @@ Run these files in the Supabase **SQL Editor**, in this order. Each one is safe 
 | 17 | `16_staff_emails.sql` | One-off: moves staff to their `firstname@excredite.ng` sign-in emails and removes the shared admin account |
 | 18 | `17_profile_pictures_and_company_accounts.sql` | Profile pictures (column, private `avatars` bucket, storage rules, pictures on the work board) and a rule allowing only `@excredite.ng` accounts |
 | 19 | `18_allowed_accounts.sql` | Only addresses on the server-only `allowed_accounts` list can hold an account |
+| 20 | `19_temporary_passwords.sql` | One-time temporary passwords for a person's first sign-in (hashed, expire, lock after 5 wrong tries) |
 
 **After running the SQL:**
 - Deploy the edge functions with the [Supabase CLI](https://supabase.com/docs/guides/cli):
@@ -278,7 +279,9 @@ Tests that download the embedding model are skipped unless `RUN_MODEL_TESTS=1` i
 
 - **Listed accounts only:** the database refuses any account whose address isn't on `public.allowed_accounts`, which may only hold `@excredite.ng` addresses. Only the server can read or change that list; the Admin Panel's **Add user** puts the new address on it. There's no self sign-up: `/signup` redirects to the login page.
 - **Sign in with email:** once your Microsoft 365 admin registers EPDH, the login page shows a single **Sign in with email** button. Behind it, staff sign in with their Excredite Microsoft 365 account. Their first sign-in links to their existing EPDH account by email. Setup steps are in [`docs/technical/microsoft-365-sign-in.md`](docs/technical/microsoft-365-sign-in.md), which also covers sending EPDH's emails from `noreply@excredite.ng`.
-- **Adding users:** admins add users, with a role and a starting password, from the **Admin Panel**. This uses the server's service-role key. Admins can also send a password-reset email from there.
+- **Adding users:** admins use **Add user** in the **Admin Panel** (service-role key on the server). EPDH shows a **temporary password** once: it works for the person's **first sign-in only**, expires after 3 days and locks after 5 wrong tries. Only a hash is stored. The person chooses **First time? Use a temporary password** on the login page. Admins can issue a new one at any time with **Issue temporary password**; the old one stops working.
+- **After the first sign-in:** people use **Sign in with email** (Microsoft 365). Until that's switched on, they're asked to choose their own password straight after their first sign-in.
+- **Signing out:** **Sign out** is at the bottom of the sidebar on computers, and in the top bar on phones.
 - **Self-registration:** the `/signup` page only works while **Authentication → Sign In / Providers → Allow new users to sign up** is on in Supabase. Accounts created there start as **General Staff**, and only an admin can change a role. To keep the platform closed, turn that setting off.
 - **Data access:** Row Level Security protects every table. The AI only searches documents the person asking is allowed to read.
 - **API routes:** every route checks the signed-in user and their role on the server. Roles are never taken from browser-supplied data.
@@ -321,6 +324,7 @@ The full history of code and database changes is in [`Tracked-changes.md`](Track
 │   │   ├── profile/              # Profile & Settings
 │   │   ├── login/ signup/ forgot-password/ reset-password/
 │   │   ├── auth/callback/        # Finishes Sign in with email (Microsoft 365)
+│   │   ├── api/auth/             # Temporary-password sign-in; first password chosen
 │   │   ├── components/           # Sidebar, Avatar, AvatarEditor
 │   │   └── api/                  # Server routes: chat, documents, news ingest, admin users
 │   ├── utils/                    # Extraction, embeddings, access, alerts, news, Supabase clients (+ __tests__)
@@ -329,7 +333,7 @@ The full history of code and database changes is in [`Tracked-changes.md`](Track
 │   └── vercel.json               # Daily news pull on Vercel
 ├── supabase/functions/           # Edge functions: admin-invite-user, generate-signed-url
 ├── schema.sql                    # Core tables
-├── 01_… to 18_….sql              # Migrations, run in order (see Local Setup)
+├── 01_… to 19_….sql              # Migrations, run in order (see Local Setup)
 ├── docs/                         # Requirements and technical documentation
 ├── Tracked-changes.md            # Change log
 └── CLAUDE.md                     # Rules for branches, the change log and SQL

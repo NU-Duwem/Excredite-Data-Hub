@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-17 · Fix "Can't resolve 'canvas'" when running the app with webpack
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #5 · **Status:** Open
 
 **What and why:** After step 2, `npm run dev` showed a build error, "Module not found: Can't resolve 'canvas'", coming from `pdfjs-dist`. The dev script builds with webpack, which tries to bundle the PDF reader's optional `canvas` module. That module is only for drawing pages and isn't installed. My earlier test build used Next's default bundler, which doesn't hit this. `next.config.ts` now lists `pdfjs-dist`, `@huggingface/transformers` and `onnxruntime-node` in `serverExternalPackages`, so Node loads them at runtime instead of webpack bundling them. The embedding library also ships native binaries that shouldn't be bundled.
 

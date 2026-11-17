@@ -128,9 +128,9 @@ export default function AvatarEditor({ userId, name, path, mode, onChange }: Pro
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-600">
-          JPG, PNG or WebP. {mode === 'self' ? 'Your' : 'The'} picture is cropped to a square and shown to signed-in staff only.
-        </p>
+        {mode === 'admin' && (
+          <p className="text-xs text-gray-600">JPG, PNG or WebP. The picture is cropped to a square and shown to signed-in staff only.</p>
+        )}
         <p role="status" aria-live="polite" className={`text-xs font-medium ${status?.kind === 'error' ? 'text-red-700' : status?.kind === 'ok' ? 'text-green-800' : 'text-gray-600'}`}>
           {status?.text ?? ''}
         </p>

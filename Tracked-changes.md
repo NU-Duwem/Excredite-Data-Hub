@@ -16,6 +16,19 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Profile & Settings: picture hint removed
+**Branch:** `dev` · **PR:** none yet · **Status:** Open
+
+**What and why:** You asked to remove "JPG, PNG or WebP. Your picture is cropped to a square and shown to signed-in staff only." from Profile & Settings. The upload control there now shows only the picture and its buttons. The Admin Panel, which uses the same control, still shows the hint.
+
+**Files:** `frontend/app/components/AvatarEditor.tsx`, `Tracked-changes.md`.
+
+**Manual steps:** none.
+
+**Testing:** TypeScript and ESLint are clean for the file. Text-only change.
+
+---
+
 ## 2026-11-18 · Sidebar showed the previous person after switching accounts
 **Branch:** `dev` · **PR:** #10 · **Status:** Open
 

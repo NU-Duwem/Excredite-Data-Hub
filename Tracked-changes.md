@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Sidebar showed the previous person after switching accounts
-**Branch:** `dev` · **PR:** #9 · **Status:** Open
+**Branch:** `dev` · **PR:** #10 · **Status:** Open
 
 **What and why:** You signed in as Phillip, but the bottom of the sidebar still showed Duwem and his role. The sidebar is part of the page frame and stays loaded when you sign out and sign in again without a full page reload, but it only loaded the signed-in person once, when the app first opened. Two related problems in the same code:
 - after signing out, the **Sign out** button stayed on "Signing out…" (disabled) for the next person;
@@ -43,7 +43,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Login page wording
-**Branch:** `dev` · **PR:** #9 · **Status:** Open
+**Branch:** `dev` · **PR:** #10 · **Status:** Open
 
 **What and why:** You asked to drop "work" from the login line. It now reads "Use your Excredite email (@excredite.ng)."
 
@@ -56,7 +56,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · ⚠️ Development-only master password (remove before deployment)
-**Branch:** `dev` · **PR:** #9 · **Status:** Open
+**Branch:** `dev` · **PR:** #9 · **Status:** Merged
 
 > **⚠️ REMINDER: take this off before deployment.** See "Before deployment" in `README.md`. `npm run build` and `npm start` refuse to run while `DEV_MASTER_PASSWORD` is set.
 

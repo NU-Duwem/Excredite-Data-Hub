@@ -4,6 +4,8 @@ import { createClient } from '@/utils/supabase/client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getRoleDisplayName, PRIMARY_ROLES } from '@/utils/roles';
+import Avatar from '@/app/components/Avatar';
+import AvatarEditor from '@/app/components/AvatarEditor';
 
 type Profile = {
   id: string;
@@ -12,6 +14,7 @@ type Profile = {
   role: string;
   is_active: boolean;
   created_at: string;
+  avatar_path: string | null;
 };
 
 type AuditRow = {
@@ -57,15 +60,6 @@ const inputCls =
 const labelCls = 'flex flex-col gap-1.5 text-xs font-bold text-gray-700';
 const btn = 'min-h-11 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-brand hover:bg-gray-50 disabled:opacity-50';
 const btnPrimary = 'min-h-11 px-4 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-hover disabled:opacity-50';
-
-const initialsOf = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((p) => p[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) || '?';
 
 async function callAdminApi(body: Record<string, unknown>): Promise<{ error?: string; message?: string; data?: unknown }> {
   try {
@@ -133,7 +127,7 @@ export default function AdminPanelPage() {
   const loadUsers = useCallback(async () => {
     const { data } = await supabase
       .from('user_profiles')
-      .select('id, email, full_name, role, is_active, created_at')
+      .select('id, email, full_name, role, is_active, created_at, avatar_path')
       .order('full_name', { ascending: true });
     return (data ?? []) as Profile[];
   }, [supabase]);
@@ -363,14 +357,13 @@ export default function AdminPanelPage() {
                         aria-current={active ? 'true' : undefined}
                         className={`w-full text-left rounded-xl px-3 py-2.5 flex items-center gap-3 ${active ? 'bg-brand/10' : 'hover:bg-gray-50'}`}
                       >
-                        <span
-                          aria-hidden="true"
-                          className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-xs font-extrabold ${
-                            u.role === 'power_admin' ? 'bg-brand text-accent' : 'bg-gray-100 text-gray-700'
-                          }`}
-                        >
-                          {maskData ? '?' : initialsOf(u.full_name || u.email)}
-                        </span>
+                        <Avatar
+                          name={u.full_name || u.email}
+                          path={u.avatar_path}
+                          size={36}
+                          masked={maskData}
+                          tone={u.role === 'power_admin' ? 'bg-brand text-accent' : 'bg-gray-100 text-gray-700'}
+                        />
                         <span className="flex-1 min-w-0">
                           <span className={`block text-sm truncate ${active ? 'font-bold text-brand' : 'font-semibold text-gray-900'}`}>
                             {mask(u.full_name || u.email, u.full_name ? 'name' : 'email')}
@@ -402,9 +395,7 @@ export default function AdminPanelPage() {
                     <button type="button" onClick={() => setSelectedId(null)} className="md:hidden min-h-9 text-sm font-semibold text-brand">
                       ←
                     </button>
-                    <span aria-hidden="true" className="h-13 w-13 min-h-[52px] min-w-[52px] rounded-full bg-accent text-brand flex items-center justify-center text-lg font-extrabold">
-                      {maskData ? '?' : initialsOf(selected.full_name || selected.email)}
-                    </span>
+                    <Avatar name={selected.full_name || selected.email} path={selected.avatar_path} size={52} masked={maskData} />
                     <div className="min-w-0">
                       <h2 className="text-xl font-extrabold text-gray-900 truncate">{mask(selected.full_name || '(no name)', 'name')}</h2>
                       <p className="text-sm text-gray-600 truncate">
@@ -412,6 +403,20 @@ export default function AdminPanelPage() {
                       </p>
                     </div>
                   </div>
+
+                  {!maskData && (
+                    <div className="max-w-2xl">
+                      <h3 className="text-xs font-bold text-gray-700 mb-2">Profile picture</h3>
+                      <AvatarEditor
+                        key={selected.id}
+                        userId={selected.id}
+                        name={selected.full_name || selected.email}
+                        path={selected.avatar_path}
+                        mode={isSelf ? 'self' : 'admin'}
+                        onChange={(p) => applyLocal(selected.id, { avatar_path: p })}
+                      />
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
                     <label className={labelCls}>

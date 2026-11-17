@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/utils/supabase/server';
 import { PRIMARY_ROLES } from '@/utils/roles';
+import { AVATAR_BUCKET, isOwnAvatarPath } from '@/utils/avatars';
 
 const VALID_ROLES: readonly string[] = PRIMARY_ROLES;
 
@@ -322,6 +323,37 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({ success: true, message: 'Document access revoked.' });
+      }
+
+      // ============================================
+      // SET PROFILE PICTURE (the admin has already uploaded the file to
+      // avatars/<targetUserId>/…; value is its path, or null to remove)
+      // ============================================
+      case 'set-avatar': {
+        if (!targetUserId || !(value === null || isOwnAvatarPath(targetUserId, value))) {
+          return NextResponse.json({ error: 'targetUserId and a picture in that user’s folder are required' }, { status: 400 });
+        }
+        if (value) {
+          const folder = value.slice(0, value.lastIndexOf('/'));
+          const file = value.slice(value.lastIndexOf('/') + 1);
+          const { data: found } = await adminClient.storage.from(AVATAR_BUCKET).list(folder, { search: file, limit: 1 });
+          if (!found?.some((f) => f.name === file)) {
+            return NextResponse.json({ error: 'Upload the picture first.' }, { status: 400 });
+          }
+        }
+        const { error } = await adminClient
+          .from('user_profiles')
+          .update({ avatar_path: value, updated_at: new Date().toISOString() })
+          .eq('id', targetUserId);
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        await adminClient.from('user_activity_log').insert({
+          user_id: auth.user.id,
+          action: 'ADMIN_SET_AVATAR',
+          details: `Admin ${value ? 'changed' : 'removed'} the profile picture of user ${targetUserId}`,
+        });
+        return NextResponse.json({ success: true, message: value ? 'Picture saved.' : 'Picture removed.' });
       }
 
       default:

@@ -73,7 +73,7 @@ export type Task = {
   createdAt: string;
 };
 
-export type Person = { id: string; name: string; role: string };
+export type Person = { id: string; name: string; role: string; avatarPath?: string | null };
 
 export type WhoFilter = 'everyone' | 'me' | 'team';
 export type DueFilter = 'any' | 'week' | 'overdue';

@@ -17,7 +17,7 @@ The **Excredite Electricity Data Hub (EPDH)** is Excredite's internal intelligen
 | Frontend | [Next.js 16](https://nextjs.org/) (App Router, webpack) and React 19, in `frontend/` |
 | Styling | [Tailwind CSS v4](https://tailwindcss.com/) and Lucide icons; charts with Recharts |
 | Database | [Supabase](https://supabase.com/) PostgreSQL with Row Level Security on every table |
-| Auth | Supabase Auth. Roles are stored in `user_profiles` and only admins or the server can set them |
+| Auth | Supabase Auth: email and password, or **Sign in with Microsoft** (Microsoft 365 / Entra ID). Only `@excredite.ng` accounts are allowed. Roles are stored in `user_profiles` and only admins or the server can set them |
 | Document search | pgvector (384 dimensions, HNSW index) plus full-text search in one hybrid search function |
 | Embeddings | `gte-small`, run locally by `@huggingface/transformers`. It's free and needs no API key |
 | AI answers | Claude (Anthropic) or Gemini (Google). Claude defaults to `claude-opus-5-5`, with automatic fallback |
@@ -52,13 +52,16 @@ The sidebar has these pages:
   Alerts carry a severity and evidence, and critical ones are shown first. Anyone can report one, and the legal team, analysts, the CEO and admins triage them.
 - **Admin Panel** (`/admin`), for admins only:
   - create users, change roles and suspend accounts;
+  - upload or remove anyone's profile picture;
   - reset passwords and use "Sign out everywhere";
   - read the activity log;
   - change system settings;
   - manage access to restricted documents.
-- **Profile & Settings** (`/profile`): your details, password and preferences.
+- **Profile & Settings** (`/profile`): your profile picture, details, sign-in method, password and preferences.
 
 **Roles:** System Admin, CEO, Legal Team, Research Analyst, Data Ingestion and General Staff. New accounts start as General Staff.
+
+**Profile pictures** appear in the sidebar, the Admin Panel and on the work board for task assignees and job leads. People without a picture are shown by their initials. Pictures are cropped to 256×256 in the browser and kept in a private storage bucket.
 
 ---
 
@@ -90,6 +93,7 @@ Run these files in the Supabase **SQL Editor**, in this order. Each one is safe 
 | 15 | `14_news_sources_sections.sql` | Points outlets at their power and energy feeds |
 | 16 | `15_document_access_and_search.sql` | Restricted documents and access grants; `gte-small` embeddings with hybrid search |
 | 17 | `16_staff_emails.sql` | One-off: moves staff to their `firstname@excredite.ng` sign-in emails and removes the shared admin account |
+| 18 | `17_profile_pictures_and_company_accounts.sql` | Profile pictures (column, private `avatars` bucket, storage rules, pictures on the work board) and a rule allowing only `@excredite.ng` accounts |
 
 **After running the SQL:**
 - Deploy the edge functions with the [Supabase CLI](https://supabase.com/docs/guides/cli):
@@ -138,6 +142,10 @@ GEMINI_API_KEY=your_gemini_key                    # Gemini
 
 # News: protects /api/news/ingest (see News below)
 CRON_SECRET=a_long_random_string
+
+# Shows "Sign in with Microsoft" once it is set up in Supabase
+# (see docs/technical/microsoft-365-sign-in.md)
+# NEXT_PUBLIC_MICROSOFT_SIGN_IN=true
 
 # Optional
 # NEXT_PUBLIC_SITE_URL=https://your-app-domain     # used in password-reset emails (default http://localhost:3000)
@@ -266,6 +274,8 @@ Tests that download the embedding model are skipped unless `RUN_MODEL_TESTS=1` i
 
 ## 🔐 Security & user accounts
 
+- **Company accounts only:** the database refuses any account that isn't `@excredite.ng`, whether it comes from sign-up, the Admin Panel or Microsoft.
+- **Sign in with Microsoft:** once your Microsoft 365 admin registers EPDH, staff can sign in with their work account. Their first Microsoft sign-in links to their existing EPDH account by email. Setup steps are in [`docs/technical/microsoft-365-sign-in.md`](docs/technical/microsoft-365-sign-in.md), which also covers sending EPDH's emails from `noreply@excredite.ng`.
 - **Adding users:** admins add users, with a role and a starting password, from the **Admin Panel**. This uses the server's service-role key. Admins can also send a password-reset email from there.
 - **Self-registration:** the `/signup` page only works while **Authentication → Sign In / Providers → Allow new users to sign up** is on in Supabase. Accounts created there start as **General Staff**, and only an admin can change a role. To keep the platform closed, turn that setting off.
 - **Data access:** Row Level Security protects every table. The AI only searches documents the person asking is allowed to read.
@@ -286,6 +296,7 @@ Project documents are in [`docs/`](docs/):
 - **`docs/technical/`**
   - **Master Technical Documentation** (Supabase + Vercel edition, `.docx`).
   - **`build_log_session_1.md`**: the first database build session.
+  - **`microsoft-365-sign-in.md`**: setting up Sign in with Microsoft and company email sending.
 
 The full history of code and database changes is in [`Tracked-changes.md`](Tracked-changes.md).
 
@@ -307,7 +318,8 @@ The full history of code and database changes is in [`Tracked-changes.md`](Track
 │   │   ├── admin/                # Admin Panel
 │   │   ├── profile/              # Profile & Settings
 │   │   ├── login/ signup/ forgot-password/ reset-password/
-│   │   ├── components/           # Sidebar
+│   │   ├── auth/callback/        # Finishes Microsoft sign-in
+│   │   ├── components/           # Sidebar, Avatar, AvatarEditor
 │   │   └── api/                  # Server routes: chat, documents, news ingest, admin users
 │   ├── utils/                    # Extraction, embeddings, access, alerts, news, Supabase clients (+ __tests__)
 │   ├── scripts/import-documents.ts   # Bulk import tool
@@ -315,7 +327,7 @@ The full history of code and database changes is in [`Tracked-changes.md`](Track
 │   └── vercel.json               # Daily news pull on Vercel
 ├── supabase/functions/           # Edge functions: admin-invite-user, generate-signed-url
 ├── schema.sql                    # Core tables
-├── 01_… to 16_….sql              # Migrations, run in order (see Local Setup)
+├── 01_… to 17_….sql              # Migrations, run in order (see Local Setup)
 ├── docs/                         # Requirements and technical documentation
 ├── Tracked-changes.md            # Change log
 └── CLAUDE.md                     # Rules for branches, the change log and SQL

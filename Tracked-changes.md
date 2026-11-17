@@ -16,6 +16,70 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Profile pictures; Sign in with Microsoft; company accounts only; Phillip Ekpo
+**Branch:** `dev` · **PR:** #7 · **Status:** Open
+
+**What and why:** You asked for:
+- Phillip's name and role to be corrected;
+- profile pictures for every user, uploaded from the app;
+- staff to sign in and verify through Excredite's Microsoft 365.
+
+**Changes:**
+- **Phillip Ekpo** (already applied to the live database):
+  - name "Philip" → "Phillip" on his profile and sign-in account;
+  - role "Application" → **System Admin**;
+  - the stale role copy on his sign-in account was replaced by the server-controlled one.
+- **Profile pictures** (`17_profile_pictures_and_company_accounts.sql`, already applied):
+  - **Storage:** a new `user_profiles.avatar_path` column, which must point into the person's own folder, and a private `avatars` bucket (JPEG/PNG/WebP, at most 2 MB).
+  - **Who can change pictures:** people can upload, replace or remove their own; admins can do this for anyone. All signed-in staff can see pictures.
+  - **Work board:** `list_matter_people()` now returns each person's picture.
+  - **In the app:**
+    - an upload control in **Profile & Settings** and in the **Admin Panel** user details;
+    - pictures in the sidebar, the Admin Panel user list, and work-board assignee chips and job leads;
+    - initials when there's no picture.
+  - **Upload handling:** pictures are cropped to a centred square and shrunk to 256×256 (WebP) in the browser before upload. The old file is deleted when a picture is replaced or removed.
+  - **Admin uploads:** these go through a new `set-avatar` action on `/api/admin/users`. It checks that the file is in that user's folder and exists, and logs `ADMIN_SET_AVATAR`.
+- **Company accounts only** (same SQL file): a trigger on `auth.users` refuses any account, new or a changed address, that isn't `@excredite.ng`.
+- **Sign in with Microsoft:**
+  - a **Sign in with Microsoft** button on the login page, shown only when `NEXT_PUBLIC_MICROSOFT_SIGN_IN=true`;
+  - a new `/auth/callback` route that finishes the sign-in, refuses deactivated accounts, logs the sign-in and only redirects within the site;
+  - plain-English errors on the login page, for example "Only @excredite.ng accounts…" or "Your account has not been set up in EPDH yet";
+  - Profile & Settings now shows the real sign-in method;
+  - the login placeholder now reads `you@excredite.ng`.
+- **Setup guide:** `docs/technical/microsoft-365-sign-in.md`, step by step for the Microsoft 365 admin (Entra app registration) and an EPDH admin (Supabase settings). It also covers sending emails from `noreply@excredite.ng` through a sending service, with SPF, DKIM and DMARC.
+- **README:** architecture, features, SQL order, environment variables, security, documents and structure.
+
+**Files:**
+- **Database:** `17_profile_pictures_and_company_accounts.sql`.
+- **Pages:** `frontend/app/components/Avatar.tsx`, `frontend/app/components/AvatarEditor.tsx`, `frontend/app/components/Sidebar.tsx`, `frontend/app/profile/page.tsx`, `frontend/app/admin/page.tsx`, `frontend/app/matters/page.tsx`, `frontend/app/login/page.tsx`.
+- **Server:** `frontend/app/auth/callback/route.ts`, `frontend/app/api/admin/users/route.ts`.
+- **Helpers:** `frontend/utils/avatars.ts`, `frontend/utils/authRedirect.ts`, `frontend/utils/matterTasks.ts`.
+- **Tests:** `frontend/utils/__tests__/avatars.test.ts`, `frontend/utils/__tests__/authRedirect.test.ts`.
+- **Docs:** `docs/technical/microsoft-365-sign-in.md`, `README.md`, `Tracked-changes.md`.
+
+**Manual steps:**
+1. The SQL is already applied to the live database.
+2. To turn on Microsoft sign-in, follow `docs/technical/microsoft-365-sign-in.md`:
+   - **Part 1**, the Microsoft 365 admin: register the app with the `email` and `xms_edov` claims, and grant consent.
+   - **Part 2**, an EPDH admin: turn on the Azure provider with the tenant URL; add the `/auth/callback` redirect URLs; turn off "Allow new users to sign up"; set `NEXT_PUBLIC_MICROSOFT_SIGN_IN=true`.
+3. For company email sending, follow Part 3 of the same guide.
+
+**Testing:**
+- **Unit tests:** 222 pass, 1 skipped. The new tests cover initials, file checks, picture paths, cropping, redirect safety and error wording.
+- **Code checks:** TypeScript is clean. ESLint shows no new problems; the remaining ones were already there.
+- **Build:** `next build --webpack` succeeds.
+- **Live database checks, as real users, rolled back afterwards:**
+  - a Research Analyst can upload their own picture but not someone else's;
+  - a profile can't point to another person's file;
+  - people can't change their own role;
+  - an admin can upload for anyone;
+  - the work-board function returns pictures.
+- **Company-accounts trigger:** same address allowed; another domain, a look-alike domain and an outside sign-up all refused.
+- **Login page:** screenshot checked, with the Microsoft button, the divider and the error panel.
+- **Security advisor:** no new findings. Only the existing leaked-password warning remains, which needs a paid plan.
+
+---
+
 ## 2026-11-18 · Staff sign-in emails; shared admin account removed
 **Branch:** `dev` · **PR:** #7 · **Status:** Open
 

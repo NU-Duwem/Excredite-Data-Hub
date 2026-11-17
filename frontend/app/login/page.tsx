@@ -1,21 +1,50 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { MICROSOFT_SIGN_IN_ENABLED } from '@/utils/authRedirect';
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [msLoading, setMsLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
+  // Errors sent back by /auth/callback (e.g. a Microsoft sign-in that didn't finish),
+  // shown until the person tries again.
+  const searchParams = useSearchParams();
+  const [retried, setRetried] = useState(false);
+  const callbackError = retried ? null : searchParams.get('error')?.slice(0, 300) ?? null;
+  const shownError = error ?? callbackError;
+
+  const handleMicrosoft = async () => {
+    setRetried(true);
+    setMsLoading(true);
+    setError(null);
+    const next = searchParams.get('next') ?? '/query';
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        scopes: 'openid profile email',
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
+    });
+    // On success the browser leaves for Microsoft; we only get here on failure.
+    if (error) {
+      setError('Microsoft sign-in is not available right now. Use your email and password.');
+      setMsLoading(false);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setRetried(true);
     setIsLoading(true);
     setError(null);
 
@@ -64,7 +93,31 @@ export default function LoginPage() {
           </p>
         </div>
         
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+        {MICROSOFT_SIGN_IN_ENABLED && (
+          <div className="mt-8 space-y-6">
+            <button
+              type="button"
+              onClick={handleMicrosoft}
+              disabled={msLoading || isLoading}
+              className="w-full min-h-11 flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand disabled:opacity-50 shadow-sm"
+            >
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 21 21">
+                <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+                <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+                <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+                <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+              </svg>
+              {msLoading ? 'Opening Microsoft…' : 'Sign in with Microsoft'}
+            </button>
+            <div className="flex items-center gap-3 text-xs font-semibold text-gray-500" aria-hidden="true">
+              <span className="h-px flex-1 bg-gray-200" />
+              or use your email and password
+              <span className="h-px flex-1 bg-gray-200" />
+            </div>
+          </div>
+        )}
+
+        <form className={`${MICROSOFT_SIGN_IN_ENABLED ? 'mt-6' : 'mt-8'} space-y-6`} onSubmit={handleLogin}>
           <div className="rounded-md shadow-sm space-y-4">
             <div>
               <label htmlFor="email-address" className="block text-sm font-medium text-gray-700 mb-1">
@@ -79,7 +132,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-brand focus:border-brand focus:z-10 sm:text-sm"
-                placeholder="admin@excredite.com"
+                placeholder="you@excredite.ng"
               />
             </div>
             <div>
@@ -127,13 +180,13 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          {error && (
-            <div className="rounded-md bg-red-50 p-4 border border-red-100">
+          {shownError && (
+            <div role="alert" className="rounded-md bg-red-50 p-4 border border-red-100">
               <div className="flex">
                 <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">Authentication failed</h3>
+                  <h3 className="text-sm font-medium text-red-800">Could not sign you in</h3>
                   <div className="mt-2 text-sm text-red-700">
-                    <p>{error}</p>
+                    <p>{shownError}</p>
                   </div>
                 </div>
               </div>
@@ -162,5 +215,13 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

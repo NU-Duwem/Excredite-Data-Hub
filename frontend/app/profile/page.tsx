@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { User } from '@supabase/supabase-js';
 import { getRoleDisplayName } from '@/utils/roles';
+import AvatarEditor from '@/app/components/AvatarEditor';
+import { announceProfileChanged } from '@/utils/avatars';
 
 type ActivityRow = { id: string; action: string | null; details: string | null; created_at: string };
 type Status = { kind: 'ok' | 'error' | 'info'; text: string } | null;
@@ -37,6 +39,15 @@ function StatusLine({ status }: { status: Status }) {
       {status.text}
     </p>
   );
+}
+
+/** How this person can sign in, from their linked identities. */
+function signInMethods(user: User | null) {
+  const providers = new Set((user?.identities ?? []).map((i) => i.provider));
+  const parts = [];
+  if (providers.has('azure')) parts.push('Microsoft account');
+  if (providers.has('email') || providers.size === 0) parts.push('Email and password');
+  return parts.join(' or ');
 }
 
 function formatWhen(iso: string) {
@@ -81,6 +92,7 @@ export default function ProfilePage() {
   const [nameDraft, setNameDraft] = useState('');
   const [nameSaving, setNameSaving] = useState(false);
   const [nameStatus, setNameStatus] = useState<Status>(null);
+  const [avatarPath, setAvatarPath] = useState<string | null>(null);
 
   // Password
   const [isForceReset, setIsForceReset] = useState(false);
@@ -110,7 +122,7 @@ export default function ProfilePage() {
         return;
       }
       const [{ data: profile }, { data: logs }] = await Promise.all([
-        supabase.from('user_profiles').select('role, full_name').eq('id', u.id).single(),
+        supabase.from('user_profiles').select('role, full_name, avatar_path').eq('id', u.id).single(),
         supabase
           .from('user_activity_log')
           .select('id, action, details, created_at')
@@ -122,6 +134,7 @@ export default function ProfilePage() {
       const name = (profile?.full_name || u.user_metadata?.full_name || u.email?.split('@')[0] || '').trim();
       setUser(u);
       setRole(profile?.role || 'power_team');
+      setAvatarPath(profile?.avatar_path ?? null);
       setSavedName(name);
       setNameDraft(name);
       setActivity((logs ?? []) as ActivityRow[]);
@@ -173,6 +186,7 @@ export default function ProfilePage() {
     } else {
       setSavedName(name);
       setNameStatus({ kind: 'ok', text: 'Name updated.' });
+      announceProfileChanged();
       await logActivity('PROFILE_UPDATED', 'Changed display name.');
       router.refresh();
     }
@@ -244,7 +258,12 @@ export default function ProfilePage() {
 
         <div className="flex gap-4 items-start">
           <div className="flex-1 min-w-0 flex flex-col gap-4">
-            <Section id="account" title="Account" desc="Your name appears on documents and in the activity log.">
+            <Section id="account" title="Account" desc="Your name and picture appear on documents, the work board and in the activity log.">
+              {user && (
+                <div className="mb-5 pb-5 border-b border-gray-100">
+                  <AvatarEditor userId={user.id} name={savedName || user.email} path={avatarPath} mode="self" onChange={setAvatarPath} />
+                </div>
+              )}
               <form onSubmit={handleSaveName} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className={labelCls}>
                   Full name
@@ -287,7 +306,7 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <dt className="text-xs text-gray-600">Sign-in method</dt>
-                  <dd className="mt-0.5 font-medium text-gray-900">Email and password</dd>
+                  <dd className="mt-0.5 font-medium text-gray-900">{signInMethods(user)}</dd>
                 </div>
                 {/* "Joined" is shown to admins only, per the requirements. */}
                 {isAdmin && user?.created_at && (

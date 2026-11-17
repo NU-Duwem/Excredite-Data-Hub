@@ -1,5 +1,6 @@
 'use client';
 
+import Avatar from '@/app/components/Avatar';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
@@ -186,7 +187,7 @@ export default function MattersPage() {
     setToday(localISODate(new Date()));
     setJobs((m.data ?? []).map(toJob));
     setTasks((t.data ?? []).map(toTask));
-    setPeople(((p.data ?? []) as { id: string; full_name: string; role: string }[]).map((x) => ({ id: x.id, name: x.full_name, role: x.role })));
+    setPeople(((p.data ?? []) as { id: string; full_name: string; role: string; avatar_path: string | null }[]).map((x) => ({ id: x.id, name: x.full_name, role: x.role, avatarPath: x.avatar_path })));
     setOrgs(((o.data ?? []) as { id: string; short_name: string | null; name: string | null }[]).map((x) => ({ id: x.id, name: x.short_name || x.name || 'Unnamed' })));
     const err = m.error || t.error;
     if (err) setStatus({ kind: 'error', text: `Couldn’t load the board: ${err.message}` });
@@ -394,7 +395,13 @@ export default function MattersPage() {
   const assigneeChip = (t: Task) => {
     if (t.team) return <span className={`${chipBase} bg-gray-900 text-white`}>Whole team</span>;
     const name = personName(t.assigneeId);
-    if (name) return <span className={`${chipBase} bg-gray-100 text-gray-800`}>{t.assigneeId === me ? `${name} (you)` : name}</span>;
+    if (name)
+      return (
+        <span className={`${chipBase} bg-gray-100 text-gray-800 inline-flex items-center gap-1.5 pl-0.5`}>
+          <Avatar name={name} path={people.find((p) => p.id === t.assigneeId)?.avatarPath} size={18} tone="bg-brand/15 text-brand" />
+          {t.assigneeId === me ? `${name} (you)` : name}
+        </span>
+      );
     if (t.assigneeId) return <span className={`${chipBase} bg-gray-100 text-gray-600`}>Former member</span>;
     return <span className={`${chipBase} border border-dashed border-gray-300 text-gray-600`}>Unassigned</span>;
   };
@@ -534,7 +541,7 @@ export default function MattersPage() {
             </div>
             <dl className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div><dt className="text-[11px] font-extrabold uppercase tracking-wider text-gray-600">Status</dt><dd className="mt-0.5 font-semibold text-gray-900">{matterStatusLabel(selectedJob.status)}</dd></div>
-              <div><dt className="text-[11px] font-extrabold uppercase tracking-wider text-gray-600">Lead</dt><dd className="mt-0.5 font-semibold text-gray-900">{personName(selectedJob.leadUserId) ?? selectedJob.leadName ?? '—'}</dd></div>
+              <div><dt className="text-[11px] font-extrabold uppercase tracking-wider text-gray-600">Lead</dt><dd className="mt-0.5 font-semibold text-gray-900 flex items-center gap-2">{personName(selectedJob.leadUserId) && <Avatar name={personName(selectedJob.leadUserId)} path={people.find((p) => p.id === selectedJob.leadUserId)?.avatarPath} size={22} />}{personName(selectedJob.leadUserId) ?? selectedJob.leadName ?? '—'}</dd></div>
               <div><dt className="text-[11px] font-extrabold uppercase tracking-wider text-gray-600">Opened</dt><dd className="mt-0.5 font-semibold text-gray-900">{selectedJob.opened ? shortDate(selectedJob.opened, year) : '—'}</dd></div>
               <div>
                 <dt className="text-[11px] font-extrabold uppercase tracking-wider text-gray-600">{selectedJob.status === 'CLOSED' ? 'Closed' : 'Deadline'}</dt>

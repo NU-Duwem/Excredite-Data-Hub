@@ -7,6 +7,8 @@ import { createClient } from '@/utils/supabase/client';
 import { useEffect, useState } from 'react';
 
 import { getRoleDisplayName } from '@/utils/roles';
+import { PROFILE_CHANGED_EVENT } from '@/utils/avatars';
+import Avatar from './Avatar';
 
 const navItems = [
   {
@@ -82,7 +84,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [userName, setUserName] = useState('User');
-  const [userInitials, setUserInitials] = useState('U');
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [alertCount, setAlertCount] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
@@ -106,31 +108,17 @@ export default function Sidebar() {
     const getUserData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Use full_name from user_metadata or fallback to email
-        const fullName = (user.user_metadata?.full_name || user.email?.split('@')[0] || 'User').trim();
-        setUserName(fullName);
-        
-        // Generate initials
-        const initials = fullName
-          .split(/\s+/)
-          .map((n: string) => n[0])
-          .join('')
-          .toUpperCase()
-          .substring(0, 2);
-        setUserInitials(initials || 'U');
-
-        // Fetch user role from user_profiles in DB for reliability
+        // The saved profile is the source of truth for name, role and picture.
         const { data: profile } = await supabase
           .from('user_profiles')
-          .select('role')
+          .select('role, full_name, avatar_path')
           .eq('id', user.id)
           .single();
-        
-        if (profile) {
-          setUserRole(profile.role);
-        } else {
-          setUserRole(user.user_metadata?.role || 'power_team');
-        }
+
+        const fullName = (profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User').trim();
+        setUserName(fullName);
+        setUserAvatar(profile?.avatar_path ?? null);
+        setUserRole(profile?.role || 'power_team');
       }
     };
 
@@ -165,6 +153,9 @@ export default function Sidebar() {
 
     getUserData();
     getAlertCount();
+    // Name or picture changed in Profile & Settings or the Admin Panel
+    window.addEventListener(PROFILE_CHANGED_EVENT, getUserData);
+    return () => window.removeEventListener(PROFILE_CHANGED_EVENT, getUserData);
   }, [supabase]);
 
   const handleLogout = async () => {
@@ -274,9 +265,7 @@ export default function Sidebar() {
           className={`flex items-center ${collapsed ? 'justify-center p-1' : 'p-2.5'} rounded-xl bg-gray-100`}
           title={collapsed ? `${userName} (${getRoleDisplayName(userRole)})` : undefined}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-brand text-sm font-bold leading-none">
-            {userInitials}
-          </div>
+          <Avatar name={userName} path={userAvatar} size={36} />
           {!collapsed && (
             <div className="ml-3 overflow-hidden">
               <p className="text-sm font-semibold text-gray-900 truncate">{userName}</p>

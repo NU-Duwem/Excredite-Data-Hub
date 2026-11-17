@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/utils/supabase/server';
 import { PRIMARY_ROLES } from '@/utils/roles';
+import { AVATAR_BUCKET, isOwnAvatarPath } from '@/utils/avatars';
+import { isCompanyEmail } from '@/utils/authRedirect';
+import { generateTemporaryPassword, temporaryPasswordProblem, TEMP_PASSWORD_HOURS, unguessablePassword } from '@/utils/tempPassword';
 
 const VALID_ROLES: readonly string[] = PRIMARY_ROLES;
 
@@ -48,20 +51,38 @@ export async function POST(req: Request) {
       // ============================================
       case 'create-user': {
         const { email, password, fullName, role } = body;
-        if (!email || !password) {
-          return NextResponse.json({ error: 'email and password are required' }, { status: 400 });
+        if (!email) {
+          return NextResponse.json({ error: 'email is required' }, { status: 400 });
         }
-        if (typeof password !== 'string' || password.length < 6) {
-          return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
+        // The admin may type a temporary password; otherwise one is generated.
+        // Either way it works for the person's first sign-in only.
+        const typed = typeof password === 'string' ? password : '';
+        const problem = typed ? temporaryPasswordProblem(typed) : null;
+        if (problem) {
+          return NextResponse.json({ error: problem }, { status: 400 });
         }
+        const temporaryPassword = typed || generateTemporaryPassword();
         const newRole = role || 'power_team';
         if (!VALID_ROLES.includes(newRole)) {
           return NextResponse.json({ error: `Invalid role: ${newRole}` }, { status: 400 });
         }
 
+        // Only listed @excredite.ng addresses can hold an account
+        // (18_allowed_accounts.sql). Adding someone puts them on the list.
+        const cleanEmail = String(email).trim().toLowerCase();
+        if (!isCompanyEmail(cleanEmail)) {
+          return NextResponse.json({ error: 'Only @excredite.ng email addresses can be added.' }, { status: 400 });
+        }
+        const { error: listError } = await adminClient
+          .from('allowed_accounts')
+          .upsert({ email: cleanEmail, note: fullName || null }, { onConflict: 'email', ignoreDuplicates: true });
+        if (listError) {
+          return NextResponse.json({ error: `Could not allow this address: ${listError.message}` }, { status: 500 });
+        }
+
         const { data: created, error } = await adminClient.auth.admin.createUser({
-          email,
-          password,
+          email: cleanEmail,
+          password: unguessablePassword(), // nobody knows it: people sign in with work email or the temporary password
           email_confirm: true, // admin-created accounts are trusted
           user_metadata: { full_name: fullName || '' },
           app_metadata: { role: newRole },
@@ -70,13 +91,28 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: error?.message || 'Could not create user' }, { status: 400 });
         }
 
+        const { data: expiresAt, error: tempError } = await adminClient.rpc('issue_temporary_password', {
+          p_user_id: created.user.id,
+          p_password: temporaryPassword,
+          p_created_by: auth.user.id,
+          p_valid_hours: TEMP_PASSWORD_HOURS,
+        });
+        if (tempError) {
+          return NextResponse.json({ error: `User created, but the temporary password failed: ${tempError.message}. Issue one from their details.` }, { status: 500 });
+        }
+
         await adminClient.from('user_activity_log').insert({
           user_id: auth.user.id,
           action: 'ADMIN_CREATE_USER',
-          details: `Admin created user ${email} with role ${newRole}`,
+          details: `Admin created user ${cleanEmail} with role ${newRole} and a one-time temporary password`,
         });
 
-        return NextResponse.json({ success: true, userId: created.user.id, message: `User ${email} created.` });
+        return NextResponse.json({
+          success: true,
+          userId: created.user.id,
+          message: `User ${cleanEmail} created.`,
+          data: { email: cleanEmail, temporaryPassword, expiresAt },
+        });
       }
 
       // ============================================
@@ -119,6 +155,42 @@ export async function POST(req: Request) {
         });
 
         return NextResponse.json({ success: true, message: 'Role updated.' });
+      }
+
+      // ============================================
+      // ISSUE A ONE-TIME TEMPORARY PASSWORD (replaces any earlier one)
+      // ============================================
+      case 'issue-temporary-password': {
+        if (!targetUserId) {
+          return NextResponse.json({ error: 'targetUserId is required' }, { status: 400 });
+        }
+        const { data: target } = await adminClient.from('user_profiles').select('email, is_active').eq('id', targetUserId).single();
+        if (!target) {
+          return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
+        if (!target.is_active) {
+          return NextResponse.json({ error: 'Reactivate this account first.' }, { status: 400 });
+        }
+        const temporaryPassword = generateTemporaryPassword();
+        const { data: expiresAt, error } = await adminClient.rpc('issue_temporary_password', {
+          p_user_id: targetUserId,
+          p_password: temporaryPassword,
+          p_created_by: auth.user.id,
+          p_valid_hours: TEMP_PASSWORD_HOURS,
+        });
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        await adminClient.from('user_activity_log').insert({
+          user_id: auth.user.id,
+          action: 'ADMIN_ISSUE_TEMP_PASSWORD',
+          details: `Admin issued a one-time temporary password for user ${targetUserId}`,
+        });
+        return NextResponse.json({
+          success: true,
+          message: 'Temporary password created.',
+          data: { email: target.email, temporaryPassword, expiresAt },
+        });
       }
 
       // ============================================
@@ -322,6 +394,37 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({ success: true, message: 'Document access revoked.' });
+      }
+
+      // ============================================
+      // SET PROFILE PICTURE (the admin has already uploaded the file to
+      // avatars/<targetUserId>/…; value is its path, or null to remove)
+      // ============================================
+      case 'set-avatar': {
+        if (!targetUserId || !(value === null || isOwnAvatarPath(targetUserId, value))) {
+          return NextResponse.json({ error: 'targetUserId and a picture in that user’s folder are required' }, { status: 400 });
+        }
+        if (value) {
+          const folder = value.slice(0, value.lastIndexOf('/'));
+          const file = value.slice(value.lastIndexOf('/') + 1);
+          const { data: found } = await adminClient.storage.from(AVATAR_BUCKET).list(folder, { search: file, limit: 1 });
+          if (!found?.some((f) => f.name === file)) {
+            return NextResponse.json({ error: 'Upload the picture first.' }, { status: 400 });
+          }
+        }
+        const { error } = await adminClient
+          .from('user_profiles')
+          .update({ avatar_path: value, updated_at: new Date().toISOString() })
+          .eq('id', targetUserId);
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        await adminClient.from('user_activity_log').insert({
+          user_id: auth.user.id,
+          action: 'ADMIN_SET_AVATAR',
+          details: `Admin ${value ? 'changed' : 'removed'} the profile picture of user ${targetUserId}`,
+        });
+        return NextResponse.json({ success: true, message: value ? 'Picture saved.' : 'Picture removed.' });
       }
 
       default:

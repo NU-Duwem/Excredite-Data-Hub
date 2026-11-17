@@ -4,6 +4,8 @@ import { createClient } from '@/utils/supabase/client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getRoleDisplayName, PRIMARY_ROLES } from '@/utils/roles';
+import Avatar from '@/app/components/Avatar';
+import AvatarEditor from '@/app/components/AvatarEditor';
 
 type Profile = {
   id: string;
@@ -12,6 +14,7 @@ type Profile = {
   role: string;
   is_active: boolean;
   created_at: string;
+  avatar_path: string | null;
 };
 
 type AuditRow = {
@@ -58,15 +61,6 @@ const labelCls = 'flex flex-col gap-1.5 text-xs font-bold text-gray-700';
 const btn = 'min-h-11 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-brand hover:bg-gray-50 disabled:opacity-50';
 const btnPrimary = 'min-h-11 px-4 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-hover disabled:opacity-50';
 
-const initialsOf = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((p) => p[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) || '?';
-
 async function callAdminApi(body: Record<string, unknown>): Promise<{ error?: string; message?: string; data?: unknown }> {
   try {
     const res = await fetch('/api/admin/users', {
@@ -79,6 +73,56 @@ async function callAdminApi(body: Record<string, unknown>): Promise<{ error?: st
   } catch {
     return { error: 'Could not reach the server.' };
   }
+}
+
+type Issued = { name: string; email: string; temporaryPassword: string; expiresAt: string };
+
+/** Shows a one-time temporary password once, so the admin can pass it on. */
+function IssuedPasswordDialog({ issued, onClose }: { issued: Issued; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(issued.temporaryPassword);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="issued-title"
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onClose();
+        }}
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 flex flex-col gap-4"
+      >
+        <h2 id="issued-title" className="text-lg font-extrabold text-gray-900">
+          Temporary password for {issued.name}
+        </h2>
+        <p className="text-sm text-gray-700">
+          Give this to {issued.name} in person or by phone, not by email. It works for <strong>one sign-in only</strong>, until{' '}
+          {new Date(issued.expiresAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}. It won’t be shown again.
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 select-all rounded-xl bg-gray-100 px-4 py-3 text-lg font-mono font-bold tracking-wider text-gray-900 text-center">
+            {issued.temporaryPassword}
+          </code>
+          <button type="button" onClick={copy} className={btn} autoFocus>
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+        <p className="text-xs text-gray-600">
+          On the login page they choose <strong>First time? Use a temporary password</strong>, then enter {issued.email} and this password.
+        </p>
+        <button type="button" onClick={onClose} className={btnPrimary}>
+          Done
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function StatusBanner({ status, onClose }: { status: Status; onClose: () => void }) {
@@ -116,6 +160,7 @@ export default function AdminPanelPage() {
 
   // Create user
   const [showCreate, setShowCreate] = useState(false);
+  const [issued, setIssued] = useState<Issued | null>(null);
   const [createForm, setCreateForm] = useState({ fullName: '', email: '', role: 'power_analyst', password: '' });
 
   // Roles preview
@@ -133,7 +178,7 @@ export default function AdminPanelPage() {
   const loadUsers = useCallback(async () => {
     const { data } = await supabase
       .from('user_profiles')
-      .select('id, email, full_name, role, is_active, created_at')
+      .select('id, email, full_name, role, is_active, created_at, avatar_path')
       .order('full_name', { ascending: true });
     return (data ?? []) as Profile[];
   }, [supabase]);
@@ -226,6 +271,21 @@ export default function AdminPanelPage() {
     setBusy(false);
   };
 
+  const issueTemporaryPassword = async () => {
+    if (!selected) return;
+    setBusy(true);
+    setStatus({ kind: 'info', text: 'Creating a temporary password…' });
+    const r = await callAdminApi({ action: 'issue-temporary-password', targetUserId: selected.id });
+    const d = r.data as { email: string; temporaryPassword: string; expiresAt: string } | undefined;
+    if (r.error || !d) {
+      setStatus({ kind: 'error', text: r.error || 'Could not create a temporary password.' });
+    } else {
+      setStatus({ kind: 'ok', text: `Temporary password created for ${selected.full_name || selected.email}. Any earlier one no longer works.` });
+      setIssued({ name: selected.full_name || d.email, ...d });
+    }
+    setBusy(false);
+  };
+
   const toggleActive = async () => {
     if (!selected) return;
     const next = !selected.is_active;
@@ -250,6 +310,8 @@ export default function AdminPanelPage() {
       setStatus({ kind: 'error', text: `Could not create user: ${r.error}` });
     } else {
       setStatus({ kind: 'ok', text: `Created ${createForm.fullName || createForm.email}.` });
+      const d = r.data as { email: string; temporaryPassword: string; expiresAt: string } | undefined;
+      if (d?.temporaryPassword) setIssued({ name: createForm.fullName || d.email, ...d });
       setShowCreate(false);
       setCreateForm({ fullName: '', email: '', role: 'power_analyst', password: '' });
       setUsers(await loadUsers());
@@ -363,14 +425,13 @@ export default function AdminPanelPage() {
                         aria-current={active ? 'true' : undefined}
                         className={`w-full text-left rounded-xl px-3 py-2.5 flex items-center gap-3 ${active ? 'bg-brand/10' : 'hover:bg-gray-50'}`}
                       >
-                        <span
-                          aria-hidden="true"
-                          className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-xs font-extrabold ${
-                            u.role === 'power_admin' ? 'bg-brand text-accent' : 'bg-gray-100 text-gray-700'
-                          }`}
-                        >
-                          {maskData ? '?' : initialsOf(u.full_name || u.email)}
-                        </span>
+                        <Avatar
+                          name={u.full_name || u.email}
+                          path={u.avatar_path}
+                          size={36}
+                          masked={maskData}
+                          tone={u.role === 'power_admin' ? 'bg-brand text-accent' : 'bg-gray-100 text-gray-700'}
+                        />
                         <span className="flex-1 min-w-0">
                           <span className={`block text-sm truncate ${active ? 'font-bold text-brand' : 'font-semibold text-gray-900'}`}>
                             {mask(u.full_name || u.email, u.full_name ? 'name' : 'email')}
@@ -402,9 +463,7 @@ export default function AdminPanelPage() {
                     <button type="button" onClick={() => setSelectedId(null)} className="md:hidden min-h-9 text-sm font-semibold text-brand">
                       ←
                     </button>
-                    <span aria-hidden="true" className="h-13 w-13 min-h-[52px] min-w-[52px] rounded-full bg-accent text-brand flex items-center justify-center text-lg font-extrabold">
-                      {maskData ? '?' : initialsOf(selected.full_name || selected.email)}
-                    </span>
+                    <Avatar name={selected.full_name || selected.email} path={selected.avatar_path} size={52} masked={maskData} />
                     <div className="min-w-0">
                       <h2 className="text-xl font-extrabold text-gray-900 truncate">{mask(selected.full_name || '(no name)', 'name')}</h2>
                       <p className="text-sm text-gray-600 truncate">
@@ -412,6 +471,20 @@ export default function AdminPanelPage() {
                       </p>
                     </div>
                   </div>
+
+                  {!maskData && (
+                    <div className="max-w-2xl">
+                      <h3 className="text-xs font-bold text-gray-700 mb-2">Profile picture</h3>
+                      <AvatarEditor
+                        key={selected.id}
+                        userId={selected.id}
+                        name={selected.full_name || selected.email}
+                        path={selected.avatar_path}
+                        mode={isSelf ? 'self' : 'admin'}
+                        onChange={(p) => applyLocal(selected.id, { avatar_path: p })}
+                      />
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
                     <label className={labelCls}>
@@ -460,13 +533,8 @@ export default function AdminPanelPage() {
                     <button type="button" onClick={saveUser} disabled={busy || !dirty} className={btnPrimary}>
                       Save changes
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => runAction('reset-password', 'Password reset email sent.')}
-                      disabled={busy}
-                      className={btn}
-                    >
-                      Send password reset
+                    <button type="button" onClick={issueTemporaryPassword} disabled={busy || !selected.is_active} className={btn}>
+                      Issue temporary password
                     </button>
                     <button
                       type="button"
@@ -635,6 +703,8 @@ export default function AdminPanelPage() {
       </div>
 
       {/* ---------------- Invite user dialog ---------------- */}
+      {issued && <IssuedPasswordDialog issued={issued} onClose={() => setIssued(null)} />}
+
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/40 p-4">
           <div
@@ -648,7 +718,7 @@ export default function AdminPanelPage() {
           >
             <div className="flex items-center justify-between px-6 pt-5">
               <h2 id="create-title" className="text-lg font-extrabold text-gray-900">
-                Invite user
+                Add user
               </h2>
               <button
                 type="button"
@@ -671,14 +741,17 @@ export default function AdminPanelPage() {
                 />
               </label>
               <label className={labelCls}>
-                Email
+                Work email
                 <input
                   type="email"
                   required
+                  pattern="[^@\s]+@[Ee][Xx][Cc][Rr][Ee][Dd][Ii][Tt][Ee]\.[Nn][Gg]"
+                  placeholder="name@excredite.ng"
                   className={inputCls}
                   value={createForm.email}
                   onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
                 />
+                <span className="font-normal text-gray-600">Their Excredite Microsoft 365 address. Adding them gives this address access to EPDH.</span>
               </label>
               <label className={labelCls}>
                 Role
@@ -691,17 +764,20 @@ export default function AdminPanelPage() {
                 </select>
               </label>
               <label className={labelCls}>
-                Temporary password
+                Temporary password (optional)
                 <input
-                  type="password"
-                  required
-                  minLength={6}
-                  autoComplete="new-password"
+                  type="text"
+                  minLength={10}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Leave blank to generate one"
                   className={inputCls}
                   value={createForm.password}
                   onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
                 />
-                <span className="font-normal text-gray-600">At least 6 characters. Share it securely; they can change it in Profile &amp; Settings.</span>
+                <span className="font-normal text-gray-600">
+                  Works for their first sign-in only and expires after 3 days. Leave blank and EPDH makes one; you’ll see it once, after creating the user.
+                </span>
               </label>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowCreate(false)} className={`${btn} flex-1`}>

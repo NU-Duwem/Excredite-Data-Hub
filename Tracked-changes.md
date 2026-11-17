@@ -16,8 +16,229 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · One-time temporary passwords; login page redesign; visible Sign out
+**Branch:** `dev` · **PR:** #8 · **Status:** Open
+
+**What and why:** You asked for:
+- a temporary password option, as in the earlier setup, that works only for a person's first sign-in;
+- a redesigned login page;
+- a visible Sign out button once signed in.
+
+On phones the sidebar is hidden, so until now there was no way to sign out, or to move between pages.
+
+**Changes:**
+- **Temporary passwords** (`19_temporary_passwords.sql`, already applied):
+  - **Storage:** a server-only `public.temporary_passwords` table holding bcrypt hashes only.
+  - **Server functions:** `issue_temporary_password()` and `redeem_temporary_password()`. Only the service role can run them; signed-in users and the public API can't.
+  - **Rules:**
+    - a password works **once**: it is checked and spent in one step;
+    - it expires after 3 days (the database allows at most 30);
+    - it locks after 5 wrong tries;
+    - it only works for an active account on the allowed list;
+    - issuing a new one replaces the old one.
+  - **Server routes:**
+    - `/api/auth/temporary-sign-in` checks the password, then starts the session with a single-use token it creates itself. No email is sent.
+    - Until Sign in with email is switched on, the person is then asked to choose their own password, with no current password needed. `/api/auth/password-chosen` clears that request once they have.
+  - **Admin Panel:**
+    - **Add user** generates a readable temporary password (for example `kfx7-Qm3r-Tb9w`), or accepts one the admin types (at least 10 characters). It's shown **once**, with a copy button and instructions.
+    - **Issue temporary password** replaces **Send password reset** in each person's details.
+    - **Add user** asks for the work email and says it grants access.
+    - New users get a random Supabase password that nobody knows.
+- **Login page redesign:**
+  - **Computers:** two panels. On the left, Excredite green with the mark, "Nigeria's power sector, in one place." and three lines on what EPDH is. On the right, a clean sign-in card.
+  - **Phones:** a single column with the wordmark.
+  - **The card:**
+    - **Sign in with email** once Microsoft 365 is switched on; until then, work email and password (with a **Forgot?** link and a **Show** button for the password);
+    - **First time? Use a temporary password** opens the first sign-in form, with **Back to sign in**;
+    - clear error and "You've signed out" messages.
+- **Sign out:**
+  - **Computers:** a full-width, outlined **Sign out** button under your name in the sidebar (an icon with a label when the sidebar is collapsed).
+  - **Phones:** a new top bar with **Menu** (all pages), the logo, your picture and **Sign out**.
+  - Signing out returns to the login page with "You've signed out".
+- **Setup guide:** step 6 now scrambles everyone's old passwords with SQL instead of turning off email sign-in, because temporary passwords need it. It also explains adding people with temporary passwords. README updated.
+
+**Files:**
+- **Database:** `19_temporary_passwords.sql`.
+- **Pages:** `frontend/app/login/page.tsx`, `frontend/app/components/Sidebar.tsx`, `frontend/app/layout.tsx`, `frontend/app/admin/page.tsx`, `frontend/app/profile/page.tsx`.
+- **Server:** `frontend/app/api/auth/temporary-sign-in/route.ts`, `frontend/app/api/auth/password-chosen/route.ts`, `frontend/app/api/admin/users/route.ts`.
+- **Helpers and tests:** `frontend/utils/tempPassword.ts`, `frontend/utils/__tests__/tempPassword.test.ts`.
+- **Docs:** `docs/technical/microsoft-365-sign-in.md`, `README.md`, `Tracked-changes.md`.
+
+**Manual steps:** none. The SQL is already applied. To start someone off, use **Add user** or **Issue temporary password** in the Admin Panel.
+
+**Testing:**
+- **Unit tests:** 226 pass, 1 skipped. New tests cover the password format and uniqueness, the checks on admin-typed passwords, and the random hidden passwords.
+- **Code checks:** TypeScript is clean, with no new lint problems.
+- **Build:** `next build --webpack` succeeds.
+- **Live database checks, rolled back afterwards:**
+  - only a hash is stored;
+  - a wrong password fails, the right one works once, and a second use fails;
+  - 5 wrong tries lock it;
+  - expired passwords and deactivated accounts are refused, and short passwords can't be issued;
+  - signed-in and anonymous users can't call the functions.
+- **Screenshots against a fake Supabase server:**
+  - the login page on a computer and a phone, including the temporary-password form;
+  - Profile & Settings with the sidebar **Sign out**;
+  - the phone top bar and menu;
+  - **Sign out** returns to `/login?signed_out=1`.
+- **Not tested end to end:** the full temporary-password sign-in, because it needs the real service-role key, which I don't hold. Please try it once with **Issue temporary password** on a test account.
+- **Security advisor:** no new findings.
+
+---
+
+## 2026-11-18 · Team photos; "Sign in with email"; only listed staff can sign in
+**Branch:** `dev` · **PR:** #8 · **Status:** Open
+
+**What and why:** You sent the team photos, asked for the sign-in button to read "Sign in with email", and asked that only the five Microsoft 365 addresses you gave can get in, with no other email or kind of email.
+
+**Changes:**
+- **Team photos** (already live):
+  - **Cropped and framed:**
+    - Taiwo's and Eyo's were screenshots with a dark frame, so they were cropped inside the round photo;
+    - Eyo is framed tighter on head and shoulders;
+    - Osefan's wide shot is centred on her face;
+    - Phillip's is a square crop.
+  - **Saved** as 512×512 WebP in the private `avatars` bucket, and linked to each profile.
+  - **How they were uploaded:** I don't hold the server's secret key, so I opened a one-off upload permission limited to exactly those four file paths, uploaded, and removed it straight away. Afterwards I confirmed that outsiders can neither upload nor download pictures.
+  - **Duwem:** no photo was in the zip, so he shows initials until one is added.
+- **Only listed staff** (`18_allowed_accounts.sql`, already applied):
+  - **The list:** a new server-only `public.allowed_accounts` table holding the five addresses. It accepts only `@excredite.ng` addresses, and signed-in users and the public API can't read or change it.
+  - **The rule:** the account trigger now also requires the address to be on the list. No other `@excredite.ng` address and no outside address can get an account by any route.
+  - **Admin Panel:** **Add user** puts the address on the list first, and refuses anything that isn't `@excredite.ng`.
+- **"Sign in with email":**
+  - **On the button:** an envelope icon and the label "Sign in with email", with "Use your Excredite work email (@excredite.ng)" underneath. No Microsoft branding is shown.
+  - **Behind it:** Excredite's Microsoft 365 sign-in, as before.
+  - **When it's switched on** (`NEXT_PUBLIC_MICROSOFT_SIGN_IN=true`), the button is the only thing on the login page; the password form is hidden.
+  - **Until then**, the password form stays so nobody is locked out.
+- **Other changes:**
+  - Error messages no longer mention Microsoft.
+  - "Create account" is removed, and `/signup` redirects to the login page.
+  - Profile & Settings shows the sign-in method as "Excredite work email".
+- **Setup guide:** reworded throughout, with a new step to turn off password sign-in in Supabase once everyone has used the button. README updated.
+
+**Files:**
+- **Database:** `18_allowed_accounts.sql`.
+- **Pages:** `frontend/app/login/page.tsx`, `frontend/app/signup/page.tsx`, `frontend/app/profile/page.tsx`.
+- **Server:** `frontend/app/auth/callback/route.ts`, `frontend/app/api/admin/users/route.ts`.
+- **Helpers and tests:** `frontend/utils/authRedirect.ts`, `frontend/utils/__tests__/authRedirect.test.ts`.
+- **Docs:** `docs/technical/microsoft-365-sign-in.md`, `README.md`, `Tracked-changes.md`.
+
+**Manual steps:**
+1. The SQL and photos are already live.
+2. Follow `docs/technical/microsoft-365-sign-in.md`, Parts 1 and 2. When everyone has signed in with the button, do step 6 there: turn off email-and-password sign-in.
+3. Optional: add Duwem's photo in Profile & Settings.
+
+**Testing:**
+- **Unit tests:** 223 pass, 1 skipped. New tests cover the company-email check, and check that error messages don't mention Microsoft.
+- **Code checks:** TypeScript is clean, with no new lint problems.
+- **Build:** `next build --webpack` succeeds.
+- **Pages:** `/signup` returns a redirect to `/login`. A screenshot of the login page confirmed the single "Sign in with email" button and the error panel.
+- **Live database checks, rolled back afterwards:**
+  - listed addresses work;
+  - an unlisted `@excredite.ng` address and an outside address are refused;
+  - the list rejects non-company addresses;
+  - signed-in users can't read the list;
+  - adding an address to the list lets that account be created.
+- **Photos:** all four profiles point to files that exist. Anonymous download and upload are refused, and the temporary upload permission is gone.
+- **Security advisor:** it noted that the new table had no access rule, so I added an explicit "no access through the API" rule. Only the existing leaked-password warning remains.
+
+---
+
+## 2026-11-18 · Profile pictures; Sign in with Microsoft; company accounts only; Phillip Ekpo
+**Branch:** `dev` · **PR:** #8 · **Status:** Open
+
+**What and why:** You asked for:
+- Phillip's name and role to be corrected;
+- profile pictures for every user, uploaded from the app;
+- staff to sign in and verify through Excredite's Microsoft 365.
+
+**Changes:**
+- **Phillip Ekpo** (already applied to the live database):
+  - name "Philip" → "Phillip" on his profile and sign-in account;
+  - role "Application" → **System Admin**;
+  - the stale role copy on his sign-in account was replaced by the server-controlled one.
+- **Profile pictures** (`17_profile_pictures_and_company_accounts.sql`, already applied):
+  - **Storage:** a new `user_profiles.avatar_path` column, which must point into the person's own folder, and a private `avatars` bucket (JPEG/PNG/WebP, at most 2 MB).
+  - **Who can change pictures:** people can upload, replace or remove their own; admins can do this for anyone. All signed-in staff can see pictures.
+  - **Work board:** `list_matter_people()` now returns each person's picture.
+  - **In the app:**
+    - an upload control in **Profile & Settings** and in the **Admin Panel** user details;
+    - pictures in the sidebar, the Admin Panel user list, and work-board assignee chips and job leads;
+    - initials when there's no picture.
+  - **Upload handling:** pictures are cropped to a centred square and shrunk to 256×256 (WebP) in the browser before upload. The old file is deleted when a picture is replaced or removed.
+  - **Admin uploads:** these go through a new `set-avatar` action on `/api/admin/users`. It checks that the file is in that user's folder and exists, and logs `ADMIN_SET_AVATAR`.
+- **Company accounts only** (same SQL file): a trigger on `auth.users` refuses any account, new or a changed address, that isn't `@excredite.ng`.
+- **Sign in with Microsoft:**
+  - a **Sign in with Microsoft** button on the login page, shown only when `NEXT_PUBLIC_MICROSOFT_SIGN_IN=true`;
+  - a new `/auth/callback` route that finishes the sign-in, refuses deactivated accounts, logs the sign-in and only redirects within the site;
+  - plain-English errors on the login page, for example "Only @excredite.ng accounts…" or "Your account has not been set up in EPDH yet";
+  - Profile & Settings now shows the real sign-in method;
+  - the login placeholder now reads `you@excredite.ng`.
+- **Setup guide:** `docs/technical/microsoft-365-sign-in.md`, step by step for the Microsoft 365 admin (Entra app registration) and an EPDH admin (Supabase settings). It also covers sending emails from `noreply@excredite.ng` through a sending service, with SPF, DKIM and DMARC.
+- **README:** architecture, features, SQL order, environment variables, security, documents and structure.
+
+**Files:**
+- **Database:** `17_profile_pictures_and_company_accounts.sql`.
+- **Pages:** `frontend/app/components/Avatar.tsx`, `frontend/app/components/AvatarEditor.tsx`, `frontend/app/components/Sidebar.tsx`, `frontend/app/profile/page.tsx`, `frontend/app/admin/page.tsx`, `frontend/app/matters/page.tsx`, `frontend/app/login/page.tsx`.
+- **Server:** `frontend/app/auth/callback/route.ts`, `frontend/app/api/admin/users/route.ts`.
+- **Helpers:** `frontend/utils/avatars.ts`, `frontend/utils/authRedirect.ts`, `frontend/utils/matterTasks.ts`.
+- **Tests:** `frontend/utils/__tests__/avatars.test.ts`, `frontend/utils/__tests__/authRedirect.test.ts`.
+- **Docs:** `docs/technical/microsoft-365-sign-in.md`, `README.md`, `Tracked-changes.md`.
+
+**Manual steps:**
+1. The SQL is already applied to the live database.
+2. To turn on Microsoft sign-in, follow `docs/technical/microsoft-365-sign-in.md`:
+   - **Part 1**, the Microsoft 365 admin: register the app with the `email` and `xms_edov` claims, and grant consent.
+   - **Part 2**, an EPDH admin: turn on the Azure provider with the tenant URL; add the `/auth/callback` redirect URLs; turn off "Allow new users to sign up"; set `NEXT_PUBLIC_MICROSOFT_SIGN_IN=true`.
+3. For company email sending, follow Part 3 of the same guide.
+
+**Testing:**
+- **Unit tests:** 222 pass, 1 skipped. The new tests cover initials, file checks, picture paths, cropping, redirect safety and error wording.
+- **Code checks:** TypeScript is clean. ESLint shows no new problems; the remaining ones were already there.
+- **Build:** `next build --webpack` succeeds.
+- **Live database checks, as real users, rolled back afterwards:**
+  - a Research Analyst can upload their own picture but not someone else's;
+  - a profile can't point to another person's file;
+  - people can't change their own role;
+  - an admin can upload for anyone;
+  - the work-board function returns pictures.
+- **Company-accounts trigger:** same address allowed; another domain, a look-alike domain and an outside sign-up all refused.
+- **Login page:** screenshot checked, with the Microsoft button, the divider and the error panel.
+- **Security advisor:** no new findings. Only the existing leaked-password warning remains, which needs a paid plan.
+
+---
+
+## 2026-11-18 · Staff sign-in emails; shared admin account removed
+**Branch:** `dev` · **PR:** #8 · **Status:** Open
+
+**What and why:** You asked for every staff account to use its short company address, and for the shared admin account to be removed. Two accounts also still signed in with the misspelling "expo" left over from `04_name_fix.sql`.
+
+**Changes (already applied to the live database):**
+
+| Person | Old sign-in email | New |
+|---|---|---|
+| Duwem Nwapi | duwem.nwapi@excredite.ng | duwem@excredite.ng |
+| Eyo Ekpo | eyo.expo@excredite.ng | eyo@excredite.ng |
+| Philip Ekpo | philip.expo@excredite.ng | phillip@excredite.ng |
+| Taiwo Odugbemi | taiwo.odugbemi@excredite.ng | taiwo@excredite.ng |
+| Osefan Anegbe | osefan.anegbe@excredite.ng | osefan@excredite.ng |
+
+- **For each person, updated:** the sign-in email, the email sign-in identity and the profile email. All three now match.
+- **Kept:** passwords, roles and everything each person owns.
+- **No emails sent:** addresses were changed directly and marked confirmed.
+- **Removed:** `admin@excredite.ng`, with its profile, sessions and 23 activity-log entries. It owned no documents, alerts, jobs, tasks, settings or access grants.
+- **Code:** no hard-coded staff emails in the code needed changing.
+
+**Files:** `16_staff_emails.sql` (new: the record of the change, safe to re-run), `README.md` (SQL run order), `Tracked-changes.md`.
+
+**Manual steps:** none for this database. Staff sign in with their new address and their existing password.
+
+**Testing:** a query after the change confirmed that each user's sign-in, identity and profile emails match and the admin account is gone. The Supabase security advisor shows only the existing leaked-password warning, which needs a paid plan.
+
+---
+
 ## 2026-11-18 · README rewritten to match the project
-**Branch:** `dev` · **PR:** #7 · **Status:** Open
+**Branch:** `dev` · **PR:** #7 · **Status:** Merged
 
 **What and why:** The README described features that don't exist (the Briefing Note Generator), left out most pages, numbered the setup steps out of order and showed the project structure as broken code fences. It now matches the app as it is.
 

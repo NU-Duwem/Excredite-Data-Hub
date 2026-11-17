@@ -7,6 +7,8 @@ import { createClient } from '@/utils/supabase/client';
 import { useEffect, useState } from 'react';
 
 import { getRoleDisplayName } from '@/utils/roles';
+import { PROFILE_CHANGED_EVENT } from '@/utils/avatars';
+import Avatar from './Avatar';
 
 const navItems = [
   {
@@ -82,7 +84,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [userName, setUserName] = useState('User');
-  const [userInitials, setUserInitials] = useState('U');
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [alertCount, setAlertCount] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
@@ -106,31 +108,17 @@ export default function Sidebar() {
     const getUserData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Use full_name from user_metadata or fallback to email
-        const fullName = (user.user_metadata?.full_name || user.email?.split('@')[0] || 'User').trim();
-        setUserName(fullName);
-        
-        // Generate initials
-        const initials = fullName
-          .split(/\s+/)
-          .map((n: string) => n[0])
-          .join('')
-          .toUpperCase()
-          .substring(0, 2);
-        setUserInitials(initials || 'U');
-
-        // Fetch user role from user_profiles in DB for reliability
+        // The saved profile is the source of truth for name, role and picture.
         const { data: profile } = await supabase
           .from('user_profiles')
-          .select('role')
+          .select('role, full_name, avatar_path')
           .eq('id', user.id)
           .single();
-        
-        if (profile) {
-          setUserRole(profile.role);
-        } else {
-          setUserRole(user.user_metadata?.role || 'power_team');
-        }
+
+        const fullName = (profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User').trim();
+        setUserName(fullName);
+        setUserAvatar(profile?.avatar_path ?? null);
+        setUserRole(profile?.role || 'power_team');
       }
     };
 
@@ -165,13 +153,27 @@ export default function Sidebar() {
 
     getUserData();
     getAlertCount();
+    // Name or picture changed in Profile & Settings or the Admin Panel
+    window.addEventListener(PROFILE_CHANGED_EVENT, getUserData);
+    return () => window.removeEventListener(PROFILE_CHANGED_EVENT, getUserData);
   }, [supabase]);
 
+  const [signingOut, setSigningOut] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const handleLogout = async () => {
+    setSigningOut(true);
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push('/login?signed_out=1');
     router.refresh();
   };
+
+  const visibleItems = navItems.filter((item) => item.href !== '/admin' || userRole === 'power_admin');
+  const isActiveHref = (href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`));
+  const signOutIcon = (
+    <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+    </svg>
+  );
 
   if (AUTH_ROUTES.includes(pathname)) {
     return null;
@@ -179,6 +181,58 @@ export default function Sidebar() {
 
 
   return (
+    <>
+      {/* Phones: top bar with menu, the person, and Sign out (the sidebar is hidden here) */}
+      <header className="md:hidden sticky top-0 z-40 bg-surface border-b border-gray-200">
+        <div className="flex items-center gap-2 px-3 h-14">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-nav"
+            className="h-10 min-w-10 px-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold text-gray-900 hover:bg-gray-100"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={menuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'} />
+            </svg>
+            Menu
+          </button>
+          <Link href="/" className="flex-1 min-w-0 flex justify-center" aria-label="Overview">
+            <Image src="/excredite-wordmark.png" alt="" width={110} height={21} className="h-auto w-[110px]" priority />
+          </Link>
+          <Avatar name={userName} path={userAvatar} size={32} />
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={signingOut}
+            className="h-10 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 flex items-center gap-1.5"
+          >
+            {signOutIcon}
+            {signingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+        </div>
+        {menuOpen && (
+          <nav id="mobile-nav" aria-label="Main" className="border-t border-gray-100 px-3 py-2 max-h-[70dvh] overflow-y-auto">
+            {visibleItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMenuOpen(false)}
+                aria-current={isActiveHref(item.href) ? 'page' : undefined}
+                className={`flex items-center justify-between min-h-11 px-3 rounded-xl text-sm ${
+                  isActiveHref(item.href) ? 'bg-brand text-white font-semibold' : 'text-gray-800 font-medium hover:bg-gray-100'
+                }`}
+              >
+                {item.label}
+                {item.badge && alertCount > 0 && (
+                  <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-brand">{alertCount}</span>
+                )}
+              </Link>
+            ))}
+          </nav>
+        )}
+      </header>
+
     <aside
       className={`${collapsed ? 'w-[76px]' : 'w-64'} bg-surface rounded-2xl hidden md:flex flex-col h-full shrink-0 transition-all duration-300 ease-in-out shadow-[0_1px_2px_rgba(10,58,34,0.06)]`}
     >
@@ -217,13 +271,9 @@ export default function Sidebar() {
       </button>
 
       <nav aria-label="Main" className="flex-1 px-3 space-y-0.5 overflow-y-auto">
-        {navItems
-          .filter((item) => item.href !== '/admin' || userRole === 'power_admin')
+        {visibleItems
           .map((item) => {
-            const isActive =
-              item.href === '/'
-                ? pathname === '/'
-                : pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const isActive = isActiveHref(item.href);
 
             return (
               <Link
@@ -274,9 +324,7 @@ export default function Sidebar() {
           className={`flex items-center ${collapsed ? 'justify-center p-1' : 'p-2.5'} rounded-xl bg-gray-100`}
           title={collapsed ? `${userName} (${getRoleDisplayName(userRole)})` : undefined}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-brand text-sm font-bold leading-none">
-            {userInitials}
-          </div>
+          <Avatar name={userName} path={userAvatar} size={36} />
           {!collapsed && (
             <div className="ml-3 overflow-hidden">
               <p className="text-sm font-semibold text-gray-900 truncate">{userName}</p>
@@ -288,17 +336,18 @@ export default function Sidebar() {
         </div>
 
         <button
+          type="button"
           onClick={handleLogout}
-          className={`flex items-center ${collapsed ? 'justify-center px-2' : 'px-3'} min-h-10 text-sm font-semibold text-red-700 hover:bg-red-50 rounded-xl transition-colors w-full`}
-          aria-label={collapsed ? 'Log out' : undefined}
-          title={collapsed ? 'Log out' : undefined}
+          disabled={signingOut}
+          className={`flex items-center justify-center gap-2 ${collapsed ? 'px-2' : 'px-3'} min-h-11 w-full rounded-xl border border-gray-200 bg-white text-sm font-semibold text-red-700 hover:bg-red-50 hover:border-red-200 disabled:opacity-60 transition-colors`}
+          aria-label={collapsed ? 'Sign out' : undefined}
+          title={collapsed ? 'Sign out' : undefined}
         >
-          <svg className={`${collapsed ? '' : 'mr-3'} h-4 w-4`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          {!collapsed && 'Log out'}
+          {signOutIcon}
+          {!collapsed && (signingOut ? 'Signing out…' : 'Sign out')}
         </button>
       </div>
     </aside>
+    </>
   );
 }

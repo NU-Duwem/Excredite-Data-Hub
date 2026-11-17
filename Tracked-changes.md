@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-17 · "Anomaly Alerts" becomes "Alerts", rebuilt as a situation room
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #1 · **Status:** Open
 
 **What and why:** The tab now covers everything the team must not miss, not only unusual power-plant output. That includes possible breaches of the law, urgent developments, contradictions between documents in the system, unusual grid data and problems with the system itself. The layout is design B, "Situation room", from the Anomaly Alerts canvas, and the tab is renamed **Alerts**.
 
@@ -94,7 +94,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-16 · Project moved to its own repository
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #1 · **Status:** Open
 
 **What and why:** The project now lives on its own in **NU-Duwem/Excredite-Data-Hub**. Before, it was **NU-Duwem/EPDH-UPDATED**, a fork of another repository; the move makes it standalone.
 

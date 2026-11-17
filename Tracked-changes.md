@@ -16,6 +16,23 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-17 · Fix "Can't resolve 'canvas'" when running the app with webpack
+**Branch:** `dev` · **PR:** #4 · **Status:** Open
+
+**What and why:** After step 2, `npm run dev` showed a build error, "Module not found: Can't resolve 'canvas'", coming from `pdfjs-dist`. The dev script builds with webpack, which tries to bundle the PDF reader's optional `canvas` module. That module is only for drawing pages and isn't installed. My earlier test build used Next's default bundler, which doesn't hit this. `next.config.ts` now lists `pdfjs-dist`, `@huggingface/transformers` and `onnxruntime-node` in `serverExternalPackages`, so Node loads them at runtime instead of webpack bundling them. The embedding library also ships native binaries that shouldn't be bundled.
+
+**Files:** `frontend/next.config.ts`
+
+**Manual steps:** pull the latest `dev`, then restart `npm run dev`.
+
+**Tested:**
+- **Before the fix:** `next build --webpack` failed with the same error.
+- **After the fix:** `next build --webpack` and `npm run build` both succeed.
+- **Under `next dev --webpack` against a fake Supabase:** re-processing a three-page PDF read pages 1 and 3 with their page numbers, flagged blank page 2, embedded both chunks with `gte-small` (384 non-zero numbers each) and marked the document COMPLETE.
+- **Remaining log warnings:** "Cannot polyfill DOMMatrix / Path2D" is harmless, since it only affects drawing pages as images.
+
+---
+
 ## 2026-11-17 · Documents for the AI, step 2: bulk import tool and shared text extraction
 **Branch:** `dev` · **PR:** #4 · **Status:** Open
 

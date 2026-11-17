@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-17 · Documents for the AI, step 2: bulk import tool and shared text extraction
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #4 · **Status:** Open
 
 **What and why:** This is a command-line tool for loading the ~4 GB document collection. It runs on the computer that holds the files, starting with a few files, as you asked. Building it turned up a serious problem: **the PDF library (`pdf-parse`) can't read valid PDFs on this Node version** ("bad XRef entry" / "Invalid PDF structure"), so PDF processing in the app failed too. Both the app and the tool now use `pdfjs-dist`.
 

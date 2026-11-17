@@ -16,8 +16,49 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · ⚠️ Development-only master password (remove before deployment)
+**Branch:** `dev` · **PR:** #9 · **Status:** Open
+
+> **⚠️ REMINDER: take this off before deployment.** See "Before deployment" in `README.md`. `npm run build` and `npm start` refuse to run while `DEV_MASTER_PASSWORD` is set.
+
+**What and why:** You asked for a master password that opens every account, for development only and never in production.
+
+**Changes:**
+- **The password:** set as `DEV_MASTER_PASSWORD` in `frontend/.env.local`, at least 16 characters. That file is never committed, and the password isn't in the code.
+- **When it works:** only with `npm run dev`. It is off whenever the app runs as production or on Vercel.
+- **What it opens:** only listed, active accounts, the same as every other way in.
+- **Comparison:** done in constant time.
+- **Logging:** each use is logged ("Signed in with the DEVELOPMENT master password") and printed as a warning in the server console.
+- **New route:** `/api/auth/dev-master-sign-in`. Its GET says whether the password is on; POST signs in. When the password is off, it answers 404.
+- **Login page:**
+  - while the password is on, an amber "Development mode: master password is on" warning, plus **Developer sign-in (master password)**, which asks for an account email and the master password;
+  - otherwise neither appears.
+- **Guard:** `next.config.ts` stops `next build` and `next start` with a clear message while `DEV_MASTER_PASSWORD` is set. This is the built-in reminder.
+- **Shared sign-in code:** starting a session is now shared between the temporary-password and master-password routes (`utils/supabase/startSession.ts`).
+- **README:** a new "Before deployment" checklist, with the master password first, and the variable documented.
+
+**Files:**
+- **Pages and server:** `frontend/app/api/auth/dev-master-sign-in/route.ts`, `frontend/app/api/auth/temporary-sign-in/route.ts`, `frontend/app/login/page.tsx`, `frontend/next.config.ts`.
+- **Helpers and tests:** `frontend/utils/devMaster.ts`, `frontend/utils/supabase/startSession.ts`, `frontend/utils/__tests__/devMaster.test.ts`.
+- **Docs:** `README.md`, `Tracked-changes.md`.
+
+**Manual steps:**
+1. To use it, add `DEV_MASTER_PASSWORD=<at least 16 characters>` to `frontend/.env.local` and restart `npm run dev`.
+2. **Before deployment, remove it and the feature** (README → Before deployment).
+
+**Testing:**
+- **Unit tests:** 228 pass, 1 skipped. New tests check that the password is only on in development, never on Vercel, never when it's too short, and matches exactly.
+- **Production build with the password set** (from the command line and from `.env.local`): fails with the warning.
+- **`next start` with the password set:** refuses to load.
+- **Production server without it:** the status check reports it off, and sign-in answers 404.
+- **Dev server with it:** the status check reports it on, and a wrong password is refused.
+- **Screenshots:** the warning and the developer form.
+- **Not tested:** a successful master-password sign-in, which needs the real service-role key.
+
+---
+
 ## 2026-11-18 · One-time temporary passwords; login page redesign; visible Sign out
-**Branch:** `dev` · **PR:** #8 · **Status:** Open
+**Branch:** `dev` · **PR:** #8 · **Status:** Merged
 
 **What and why:** You asked for:
 - a temporary password option, as in the earlier setup, that works only for a person's first sign-in;
@@ -87,7 +128,7 @@ On phones the sidebar is hidden, so until now there was no way to sign out, or t
 ---
 
 ## 2026-11-18 · Team photos; "Sign in with email"; only listed staff can sign in
-**Branch:** `dev` · **PR:** #8 · **Status:** Open
+**Branch:** `dev` · **PR:** #8 · **Status:** Merged
 
 **What and why:** You sent the team photos, asked for the sign-in button to read "Sign in with email", and asked that only the five Microsoft 365 addresses you gave can get in, with no other email or kind of email.
 
@@ -145,7 +186,7 @@ On phones the sidebar is hidden, so until now there was no way to sign out, or t
 ---
 
 ## 2026-11-18 · Profile pictures; Sign in with Microsoft; company accounts only; Phillip Ekpo
-**Branch:** `dev` · **PR:** #8 · **Status:** Open
+**Branch:** `dev` · **PR:** #8 · **Status:** Merged
 
 **What and why:** You asked for:
 - Phillip's name and role to be corrected;
@@ -209,7 +250,7 @@ On phones the sidebar is hidden, so until now there was no way to sign out, or t
 ---
 
 ## 2026-11-18 · Staff sign-in emails; shared admin account removed
-**Branch:** `dev` · **PR:** #8 · **Status:** Open
+**Branch:** `dev` · **PR:** #8 · **Status:** Merged
 
 **What and why:** You asked for every staff account to use its short company address, and for the shared admin account to be removed. Two accounts also still signed in with the misspelling "expo" left over from `04_name_fix.sql`.
 

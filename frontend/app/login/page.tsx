@@ -1,12 +1,12 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { MICROSOFT_SIGN_IN_ENABLED, safeNextPath } from '@/utils/authRedirect';
 
-type Mode = 'main' | 'temporary';
+type Mode = 'main' | 'temporary' | 'developer';
 
 const inputCls =
   'w-full min-h-12 rounded-xl border border-gray-300 bg-white px-4 text-[15px] text-gray-900 placeholder-gray-400 outline-none focus:border-brand focus:ring-2 focus:ring-brand/30';
@@ -73,7 +73,20 @@ function LoginForm() {
   const [mode, setMode] = useState<Mode>('main');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState<null | 'work' | 'password' | 'temporary'>(null);
+  const [busy, setBusy] = useState<null | 'work' | 'password' | 'temporary' | 'developer'>(null);
+
+  // ⚠️ Development only: is the master password on? (Never in production builds.)
+  const [devMaster, setDevMaster] = useState(false);
+  useEffect(() => {
+    let active = true;
+    fetch('/api/auth/dev-master-sign-in')
+      .then((r) => (r.ok ? r.json() : { enabled: false }))
+      .then((j) => active && setDevMaster(!!j.enabled))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   const [error, setError] = useState<string | null>(null);
 
   // Messages sent back by /auth/callback or sign-out, shown until the person tries again.
@@ -82,7 +95,7 @@ function LoginForm() {
   const signedOut = !touched && searchParams.get('signed_out') === '1';
   const shownError = error ?? callbackError;
 
-  const start = (kind: 'work' | 'password' | 'temporary') => {
+  const start = (kind: 'work' | 'password' | 'temporary' | 'developer') => {
     setTouched(true);
     setError(null);
     setBusy(kind);
@@ -141,6 +154,29 @@ function LoginForm() {
     }
   };
 
+  const signInWithMasterPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    start('developer');
+    try {
+      const res = await fetch('/api/auth/dev-master-sign-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(json.error || 'Could not sign you in.');
+        setBusy(null);
+        return;
+      }
+      router.push(next === '/query' ? json.next || '/' : next);
+      router.refresh();
+    } catch {
+      setError('Could not reach EPDH.');
+      setBusy(null);
+    }
+  };
+
   const switchMode = (m: Mode) => {
     setMode(m);
     setTouched(true);
@@ -195,6 +231,13 @@ function LoginForm() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(10,58,34,0.06),0_12px_32px_-12px_rgba(10,58,34,0.18)] p-7 sm:p-9">
+            {devMaster && (
+              <div role="note" className="mb-5 rounded-xl border border-accent bg-accent-soft px-4 py-3 text-sm text-accent-ink">
+                <p className="font-bold">Development mode: master password is on</p>
+                <p className="mt-0.5">Any listed account can be opened with it. Remove DEV_MASTER_PASSWORD from .env.local before deployment.</p>
+              </div>
+            )}
+
             {mode === 'main' ? (
               <>
                 <h2 className="text-2xl font-extrabold tracking-tight text-gray-900">Sign in</h2>
@@ -209,8 +252,8 @@ function LoginForm() {
                 >
                   ← Back to sign in
                 </button>
-                <h2 className="text-2xl font-extrabold tracking-tight text-gray-900">First sign-in</h2>
-                <p className="mt-1.5 text-sm text-gray-600">
+                <h2 className="text-2xl font-extrabold tracking-tight text-gray-900">{mode === 'developer' ? 'Developer sign-in' : 'First sign-in'}</h2>
+                <p className={`mt-1.5 text-sm text-gray-600 ${mode === 'developer' ? 'hidden' : ''}`}>
                   Enter the temporary password an EPDH admin gave you. It works once; after that, use{' '}
                   {MICROSOFT_SIGN_IN_ENABLED ? 'Sign in with email' : 'the password you’ll choose next'}.
                 </p>
@@ -302,6 +345,49 @@ function LoginForm() {
                   {busy === 'temporary' ? 'Checking…' : 'Continue'}
                 </button>
               </form>
+            )}
+
+            {mode === 'developer' && (
+              <form onSubmit={signInWithMasterPassword} className="mt-6 space-y-4">
+                <p className="text-sm text-gray-600">Sign in as any listed staff member with the development master password.</p>
+                <div>
+                  <label htmlFor="dev-email" className={labelCls}>
+                    Account email
+                  </label>
+                  <input
+                    id="dev-email"
+                    type="email"
+                    autoComplete="off"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@excredite.ng"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="dev-password" className={labelCls}>
+                    Master password
+                  </label>
+                  <PasswordInput id="dev-password" value={password} onChange={setPassword} autoComplete="off" />
+                </div>
+                <button type="submit" disabled={busy !== null} className={primaryBtn}>
+                  {busy === 'developer' && <Spinner />}
+                  {busy === 'developer' ? 'Signing in…' : 'Sign in as this person'}
+                </button>
+              </form>
+            )}
+
+            {mode === 'main' && devMaster && (
+              <div className="mt-4 text-center">
+                <button
+                  type="button"
+                  onClick={() => switchMode('developer')}
+                  className="min-h-10 px-3 rounded-lg text-sm font-semibold text-accent-ink hover:bg-accent-soft"
+                >
+                  Developer sign-in (master password)
+                </button>
+              </div>
             )}
 
             {mode === 'main' && (

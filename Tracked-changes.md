@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-17 · Documents for the AI, step 1: free embeddings, real search, open access with admin restrictions, locked-down routes
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #3 · **Status:** Open
 
 **What and why:** This prepares the app for the bulk import of about 4 GB of documents. Checking the existing setup turned up these problems:
 - **Search by meaning had never worked:** all 46 stored chunk embeddings were zeros, because the Gemini embedding calls failed and the code silently saved placeholders.

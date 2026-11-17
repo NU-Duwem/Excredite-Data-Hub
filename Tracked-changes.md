@@ -16,8 +16,58 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Clear upload confirmation; project documents moved into `docs/`
+**Branch:** `dev` · **PR:** #6 · **Status:** Open
+
+**What and why:**
+1. **Upload confirmation.** After a successful upload the page used to show one small line of green text for 2 seconds, then cleared the form. That was easy to miss, and it said nothing about whether processing worked.
+2. **Documents in one place.** You asked for all documents to sit in a single folder, grouped, with redundant files removed.
+
+**Changes:**
+- **Upload confirmation panel:** after an upload, a large panel replaces the form and stays until you move on.
+  - **Title:** "Uploaded: now preparing it for the AI", then "Upload complete", or "Uploaded, but processing failed".
+  - **The file:** document title, file name and size.
+  - **Three live steps:** "File uploaded", "Reading the text" (with a spinner) and "Ready for AI search". These update on their own while the page refreshes pending documents every 4 seconds.
+  - **On failure:** the reason, for example "Old Word format (.doc): open it in Word and save as .docx." A Re-process hint appears only when retrying could help.
+  - **When complete:** any note, such as pages that need OCR.
+  - **Buttons:** **Open document** (opens it in the library), **Upload another** and **Back to library**.
+  - **Screen readers:** the panel announces its changes.
+  - **Form label:** the "Document Title" label is now connected to its box.
+- **Documents moved into `docs/`:**
+  - **`docs/frontend/`:** Frontend Requirements (`.docx`), Frontend Improvement Log (`.docx`), `frontend improvement.md` and `conti.md` (moved from `frontend/`).
+  - **`docs/technical/`:** Master Technical Documentation, Supabase + Vercel edition (`.docx`), and `build_log_session_1.md`.
+- **Deleted as redundant** (you chose this; they can be recovered from git history):
+  - the old pre-Supabase version of the master document: `before vercel.md` and `EPDH_Master_Technical_Documentation.backup_before_supabase_vercel.docx`;
+  - `.md` files that were word-for-word copies of Word documents: `frontend.md` (Frontend Requirements) and `supabase-vercel.md` (Master Technical Documentation);
+  - the unused Next.js starter `frontend/README.md`;
+  - a Word lock file, `~$DH_Frontend_Improvement_Log.docx`.
+- **`.gitignore`:** ignores Word and Excel lock files (`~$*`).
+- **`README.md`:** new "Documentation" section describing `docs/`.
+- **Not moved:** `README.md`, `CLAUDE.md` and `Tracked-changes.md` stay at the root, because GitHub and the tools look for them there.
+
+**Files:**
+- `frontend/app/documents/page.tsx`
+- `docs/frontend/*` and `docs/technical/*` (moved)
+- the deleted files above
+- `.gitignore`
+- `README.md`
+
+**Manual steps:** none. On your computer, pulling `dev` moves the files; any copies you edited locally in the old places should be moved by hand.
+
+**Tested:**
+- **Under `next dev --webpack`, against a fake Supabase that stores files and records, in Chromium:**
+  - **PDF upload:** the panel showed "now preparing" with the text step spinning, then switched to "Upload complete" with all three steps ticked and the blank-page note. **Open document** opened it in the library.
+  - **Old `.doc` upload:** the panel showed "Uploaded, but processing failed" and the save-as-.docx reason.
+  - **Upload another:** brought back an empty form.
+- **Type check:** passes.
+- **Lint:** the page's lint count is unchanged at 28, all in older code.
+- **Tests:** 214 pass.
+- **References:** nothing outside this change log refers to the moved or deleted files.
+
+---
+
 ## 2026-11-17 · Fix "Can't resolve 'canvas'" when running the app with webpack
-**Branch:** `dev` · **PR:** #5 · **Status:** Open
+**Branch:** `dev` · **PR:** #5 · **Status:** Merged
 
 **What and why:** After step 2, `npm run dev` showed a build error, "Module not found: Can't resolve 'canvas'", coming from `pdfjs-dist`. The dev script builds with webpack, which tries to bundle the PDF reader's optional `canvas` module. That module is only for drawing pages and isn't installed. My earlier test build used Next's default bundler, which doesn't hit this. `next.config.ts` now lists `pdfjs-dist`, `@huggingface/transformers` and `onnxruntime-node` in `serverExternalPackages`, so Node loads them at runtime instead of webpack bundling them. The embedding library also ships native binaries that shouldn't be bundled.
 

@@ -154,6 +154,8 @@ function DocumentsContent() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<'idle' | 'uploading' | 'success' | 'error' | 'duplicate'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
+  // The last successful upload: shown as a confirmation panel that follows processing.
+  const [lastUpload, setLastUpload] = useState<{ id: string; title: string; fileName: string; size: number } | null>(null);
   const [duplicateDocMatch, setDuplicateDocMatch] = useState<Document | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -621,27 +623,24 @@ function DocumentsContent() {
           setUploadMessage(result.error || 'Upload failed. Please try again.');
         }
       } else {
-        setUploadProgress('success');
-        setUploadMessage(`"${uploadTitle}" uploaded successfully! Processing in background...`);
         if (result.document) {
           setDocuments(prev => [result.document, ...prev.filter(d => d.id !== result.document.id)]);
-          setSelectedDoc(result.document);
+          setLastUpload({ id: result.document.id, title: uploadTitle, fileName: selectedFile.name, size: selectedFile.size });
         }
-        setTimeout(() => {
-          setSelectedFile(null);
-          setUploadTitle('');
-          setDocType('REGULATORY_ORDER');
-          setCustomType('');
-          setClassification('PUBLIC');
-          setKeywords('');
-          setLinkToMatter(false);
-          setSelectedMatter(null);
-          setDuplicateDocMatch(null);
-          setUploadProgress('idle');
-          setUploadMessage('');
-          setFilePreviewUrl(null);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        }, 2000);
+        // Clear the form; the confirmation panel takes its place until the user moves on.
+        setSelectedFile(null);
+        setUploadTitle('');
+        setDocType('REGULATORY_ORDER');
+        setCustomType('');
+        setClassification('PUBLIC');
+        setKeywords('');
+        setLinkToMatter(false);
+        setSelectedMatter(null);
+        setDuplicateDocMatch(null);
+        setUploadProgress('idle');
+        setUploadMessage('');
+        setFilePreviewUrl(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     } catch (err: any) {
       setUploadProgress('error');
@@ -928,7 +927,87 @@ function DocumentsContent() {
         {/* ============================================ */}
         {/* TAB: Upload */}
         {/* ============================================ */}
-        {activeTab === 'upload' && (
+        {activeTab === 'upload' && lastUpload && (() => {
+          const doc = documents.find(d => d.id === lastUpload.id);
+          const status = doc?.processing_status ?? 'PENDING';
+          const done = status === 'COMPLETE';
+          const failed = status === 'FAILED';
+          const step = (state: 'done' | 'active' | 'todo' | 'failed', label: string, hint: string) => (
+            <li className="flex items-start gap-3">
+              <span aria-hidden="true" className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-sm font-bold ${
+                state === 'done' ? 'bg-brand text-white' : state === 'failed' ? 'bg-red-600 text-white' : state === 'active' ? 'bg-accent-soft text-accent-ink' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {state === 'done' ? '✓' : state === 'failed' ? '!' : state === 'active' ? <span className="h-3.5 w-3.5 rounded-full border-2 border-accent-ink border-t-transparent animate-spin" /> : '•'}
+              </span>
+              <span>
+                <span className={`block text-sm font-bold ${state === 'todo' ? 'text-gray-500' : 'text-gray-900'}`}>{label}</span>
+                <span className="block text-xs text-gray-600">{hint}</span>
+              </span>
+            </li>
+          );
+          return (
+            <section aria-live="polite" aria-labelledby="upload-done-title" className={`max-w-3xl mx-auto bg-white rounded-2xl border-2 p-6 sm:p-8 ${failed ? 'border-red-300' : 'border-brand/40'}`}>
+              <div className="flex items-start gap-4">
+                <span aria-hidden="true" className={`h-14 w-14 shrink-0 rounded-full flex items-center justify-center ${failed ? 'bg-red-100 text-red-700' : 'bg-brand text-white'}`}>
+                  {failed ? (
+                    <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v5m0 3h.01" /></svg>
+                  ) : (
+                    <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                  )}
+                </span>
+                <div className="min-w-0">
+                  <h2 id="upload-done-title" className="text-xl font-extrabold text-gray-900">
+                    {failed ? 'Uploaded, but processing failed' : done ? 'Upload complete' : 'Uploaded: now preparing it for the AI'}
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-700 break-words">
+                    <strong>{lastUpload.title}</strong> · {lastUpload.fileName} · {formatFileSize(lastUpload.size)}
+                  </p>
+                </div>
+              </div>
+
+              <ol className="mt-6 flex flex-col gap-4">
+                {step('done', 'File uploaded', 'Saved in the document library.')}
+                {step(failed ? 'failed' : done ? 'done' : 'active', 'Reading the text', failed ? 'This step failed (reason below).' : done ? 'Text extracted and indexed.' : 'This usually takes a few seconds to a minute; you can leave this page.')}
+                {step(done ? 'done' : failed ? 'todo' : 'todo', 'Ready for AI search', done ? 'The AI can now find and quote this document.' : 'Happens automatically when the text is ready.')}
+              </ol>
+
+              {failed && (
+                <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+                  <strong>Why:</strong> {(() => { const why = doc?.notes || 'The file could not be processed.'; return /[.!?]$/.test(why) ? why : `${why}.`; })()} {canManage(doc ?? ({} as Document)) && !/save (it )?as \.(docx|pptx)/i.test(doc?.notes ?? '') && 'You can try again with Re-process on the document.'}
+                </p>
+              )}
+              {done && doc?.notes && (
+                <p className="mt-5 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-ink"><strong>Note:</strong> {doc.notes}</p>
+              )}
+
+              <div className="mt-6 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => { if (doc) setSelectedDoc(doc); setActiveTab('view-document'); setLastUpload(null); }}
+                  className="min-h-11 px-5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-hover"
+                >
+                  Open document
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLastUpload(null)}
+                  className="min-h-11 px-5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                >
+                  Upload another
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab('view-document'); setLastUpload(null); }}
+                  className="min-h-11 px-4 rounded-xl text-sm font-semibold text-brand hover:underline underline-offset-4"
+                >
+                  Back to library
+                </button>
+              </div>
+            </section>
+          );
+        })()}
+
+        {activeTab === 'upload' && !lastUpload && (
           <div className="max-w-3xl mx-auto space-y-6">
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
               <h2 className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-wider">Upload New Document</h2>
@@ -991,8 +1070,9 @@ function DocumentsContent() {
                 )}
 
                 <div className="mt-4">
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Document Title</label>
+                  <label htmlFor="upload-title" className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Document Title</label>
                   <input
+                    id="upload-title"
                     type="text"
                     value={uploadTitle}
                     onChange={(e) => setUploadTitle(e.target.value)}
@@ -1146,12 +1226,6 @@ function DocumentsContent() {
                 {/* Standard Status Banners */}
                 {uploadProgress === 'error' && !uploadMessage.toLowerCase().includes('duplicate') && (
                   <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-semibold text-red-700">
-                    {uploadMessage}
-                  </div>
-                )}
-                {uploadProgress === 'success' && (
-                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-xs font-semibold text-green-700 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                     {uploadMessage}
                   </div>
                 )}

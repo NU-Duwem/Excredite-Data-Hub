@@ -137,6 +137,23 @@ To access the platform locally:
 
 ---
 
+## 📚 Documentation
+
+Project documents live in [`docs/`](docs/):
+
+- **`docs/frontend/`**
+  - **Frontend Requirements** (`.docx`): what each page must do.
+  - **Frontend Improvement Log** (`.docx`): required and recommended changes after reviewing the app against the requirements.
+  - **`frontend improvement.md`**: the May 2026 refinement log.
+  - **`conti.md`**: requested updates to Profile & Settings and other pages.
+- **`docs/technical/`**
+  - **Master Technical Documentation** (Supabase + Vercel edition, `.docx`).
+  - **`build_log_session_1.md`**: the first database build session.
+
+The full history of code and database changes is in [`Tracked-changes.md`](Tracked-changes.md).
+
+---
+
 ## 📂 Project Structure
 
 \`\`\`text

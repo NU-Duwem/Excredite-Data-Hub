@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · README rewritten to match the project
-**Branch:** `dev` · **PR:** none yet · **Status:** Open
+**Branch:** `dev` · **PR:** #7 · **Status:** Open
 
 **What and why:** The README described features that don't exist (the Briefing Note Generator), left out most pages, numbered the setup steps out of order and showed the project structure as broken code fences. It now matches the app as it is.
 

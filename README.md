@@ -20,7 +20,7 @@ EPDH is built on a modern, serverless stack designed for high security and perfo
 
 - **AI Query Interface:** Plain-text querying interface for querying grid generation, tariffs, and regulations.
 - **Briefing Note Generator:** Automated engine to compile data into a 6-part executive summary structure.
-- **Anomaly Alerts:** System flags for unusual grid patterns (e.g., unexpected plant load drops).
+- **Alerts:** One place for anything the team must not miss: possible breaches of the law, urgent developments, contradictions between documents, unusual grid data and system problems. Critical alerts are shown first; anyone can report one.
 - **Document Registry:** Secure repository for regulatory filings and legal matters, utilizing Row Level Security (RLS) for data isolation.
 - **Administrative Access Control:** Strictly closed system with Role-Based Access Control (RBAC). Self-registration is disabled.
 
@@ -44,7 +44,8 @@ To set up the database schema and RLS policies, execute the SQL files in your Su
 7. `10_news_topics.sql` - Topic tags on news articles, used by the News & Updates filters.
 8. `11_user_roles_lockdown.sql` - Stops users changing their own role or status, takes the signup role only from server-set `app_metadata`, and adds `force_logout_user()` for the Admin Panel's "Sign out everywhere". Afterwards redeploy the `admin-invite-user` edge function (`supabase functions deploy admin-invite-user`).
 9. `12_matter_tasks.sql` - Tasks on Regulatory & Advisory jobs (the work board): the `matter_tasks` table, a job lead linked to a real user, `list_matter_people()` for assignee names, and edit rights on jobs and tasks for the legal team.
-10. In the dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**. This is not available in SQL, and needs a paid Supabase plan.
+10. `13_alerts.sql` - Turns Anomaly Alerts into Alerts: categories (legal & compliance, urgent developments, document contradictions, grid & data, system), severity, evidence, hand-filed reports by any signed-in user, triage by the legal team, analysts, the CEO and admins, and automatic alerts for failing news feeds.
+11. In the dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**. This is not available in SQL, and needs a paid Supabase plan.
 
 ### 2. Frontend Setup
 Navigate to the frontend directory:
@@ -115,7 +116,7 @@ To access the platform locally:
 .
 ├── frontend/               # Next.js Application
 │   ├── app/                # Next.js App Router (Pages & Layouts)
-│   │   ├── alerts/         # Anomaly Alerts View
+│   │   ├── alerts/         # Alerts (situation room)
 │   │   ├── briefing/       # Briefing Note Generator
 │   │   ├── components/     # Reusable UI Components (Sidebar, etc.)
 │   │   ├── documents/      # Document Registry

@@ -100,6 +100,12 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
     const field = ref.current?.querySelector<HTMLElement>('input:not(:disabled), select:not(:disabled), textarea:not(:disabled)');
     (field ?? ref.current)?.focus();
   }, []);
+  // Escape closes the dialog even when focus has left it (e.g. the clicked button was replaced).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
@@ -108,7 +114,6 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         aria-modal="true"
         aria-labelledby="modal-title"
         tabIndex={-1}
-        onKeyDown={(e) => e.key === 'Escape' && onClose()}
         className="w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto bg-white rounded-2xl shadow-2xl"
       >
         <div className="flex items-center justify-between px-6 pt-5">

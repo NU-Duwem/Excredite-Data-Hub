@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { requestFeedRefresh, type RefreshOutcome } from '@/utils/news/refreshClient';
 import { ALL_TOPIC_IDS, TOPIC_LABELS, type TopicId } from '@/utils/news/topics';
@@ -47,7 +48,17 @@ const RefreshIcon = ({ spinning }: { spinning: boolean }) => (
 );
 
 export default function NewsPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewsContent />
+    </Suspense>
+  );
+}
+
+function NewsContent() {
   const supabase = useMemo(() => createClient(), []);
+  // ?topic=<id> (e.g. from the Overview) opens the page filtered to that topic.
+  const searchParams = useSearchParams();
 
   // --- Data -----------------------------------------------------------------
   const [articles, setArticles] = useState<NewsArticle[]>([]);
@@ -63,7 +74,10 @@ export default function NewsPage() {
   const [region, setRegion] = useState<RegionFilter>('ALL');
   const [timeRange, setTimeRange] = useState<TimeRange>(DEFAULT_TIME_RANGE);
   const [searchQuery, setSearchQuery] = useState('');
-  const [topics, setTopics] = useState<Set<TopicId>>(() => new Set(ALL_TOPIC_IDS));
+  const [topics, setTopics] = useState<Set<TopicId>>(() => {
+    const t = searchParams.get('topic') as TopicId | null;
+    return t && ALL_TOPIC_IDS.includes(t) ? new Set([t]) : new Set(ALL_TOPIC_IDS);
+  });
   const [selectedSources, setSelectedSources] = useState<Set<string> | null>(null); // null = all
 
   // --- UI -------------------------------------------------------------------

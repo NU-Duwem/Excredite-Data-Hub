@@ -16,6 +16,42 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Overview rebuilt around regularly updated data
+**Branch:** `dev` · **PR:** none yet · **Status:** Open
+
+**What and why:** You asked for the Overview to use data that is updated regularly instead of generation data, which isn't readily available. The newest generation record in the database is from 30 June 2024, so the "Daily generation" chart and the "Installed capacity" tile were showing old figures.
+
+**Changes:**
+- **Removed:** the "Daily generation" chart and the "Installed capacity" tile.
+- **New big green tile, "Power-sector news":**
+  - the four latest headlines, each with source, age and topic;
+  - how many stories arrived in the last 7 days, from how many active sources, and when the feeds were last checked;
+  - **Refresh** and **All news**.
+- **New amber tile, "Open alerts":** the number waiting for review, how many are critical or high, the latest alert, and a link to review them. When there are none, it says "All clear" and links to reporting one.
+- **New "My tasks":** your open tasks from the work board (assigned to you or to the whole team), soonest first, with overdue tasks in red and the job name. People who can't see the work board get a short note instead.
+- **Kept "Next deadlines":** the next job deadlines.
+- **New "This week's topics":** stories per news topic over the last 7 days, with the most covered topic highlighted. Each topic opens News & Updates filtered to it.
+- **Replacing "Document processing", new "Recent documents":** the three newest documents, with their processing state, a total count, a warning if any failed, and **Upload document**.
+- **Links from the Overview:**
+  - News & Updates now accepts `?topic=<id>`;
+  - Documents now accepts `?doc=<id>`, which opens that document.
+- **Smaller fixes:** the greeting uses your saved profile name, and "this week" and "overdue" are worked out from when the page loaded.
+
+**Files:**
+- **Pages:** `frontend/app/page.tsx`, `frontend/app/news/page.tsx`, `frontend/app/documents/page.tsx`.
+- **Helpers and tests:** `frontend/utils/overview.ts`, `frontend/utils/__tests__/overview.test.ts`.
+- **Log:** `Tracked-changes.md`.
+
+**Manual steps:** none.
+
+**Testing:**
+- **Unit tests:** 233 pass, 1 skipped. New tests cover topic counts, the 7-day window, "my tasks" ordering, alert severity counts and time formatting.
+- **Code checks:** TypeScript is clean, with no new lint problems.
+- **Screenshots** against a fake Supabase server with sample data, on a computer and a phone.
+- **Links:** `/news?topic=grid` and `/documents?doc=…` both load.
+
+---
+
 ## 2026-11-18 · Per-person access to Regulatory & Advisory Matters (prepared, not applied yet)
 **Branch:** `dev` · **PR:** none yet · **Status:** Open, **SQL not yet applied**
 

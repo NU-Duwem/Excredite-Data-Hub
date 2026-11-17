@@ -435,6 +435,13 @@ function DocumentsContent() {
       
       if (!error && data) {
         setDocuments(data);
+        // ?doc=<id> (e.g. from the Overview) opens that document.
+        const wanted = searchParams.get('doc');
+        const match = wanted ? data.find((d: { id: string }) => d.id === wanted) : null;
+        if (match) {
+          setSelectedDoc(match);
+          setActiveTab('view-document');
+        }
 
         // Trigger background processing once for stuck PENDING documents
         const pendingDocs = data.filter((d: any) => d.processing_status === 'PENDING');

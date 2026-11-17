@@ -16,6 +16,33 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Per-person access to Regulatory & Advisory Matters (prepared, not applied yet)
+**Branch:** `dev` · **PR:** none yet · **Status:** Open, **SQL not yet applied**
+
+**What and why:** You asked to give Taiwo (Research Analyst) access to Regulatory & Advisory Matters. You chose "view and work on tasks", for Taiwo only. Today only System Admins, the CEO and the Legal Team can see the work board.
+
+**Changes (in `20_matter_access.sql`, not yet applied: Supabase's approval request timed out):**
+- **Per-person grants:** a new `public.matter_access_grants` table. People can read their own grant and admins can read all. Only the server writes it.
+- **What a grant allows:** `private.has_matter_grant()` is used by the database rules, so someone with a grant can:
+  - see all jobs and tasks;
+  - create, edit, complete and delete tasks;
+  - be assigned tasks, because they appear in `list_matter_people()`.
+- **Unchanged:** creating and editing jobs stays with Admins and Legal.
+- **First grant:** Taiwo.
+
+**Still to do after the SQL is applied:**
+- **Work-board page:** use the grant, showing task controls without job editing.
+- **Admin Panel:** a switch to give or remove this access.
+- **Checks:** run as Taiwo and rolled back, plus the security advisor.
+
+**Files:** `20_matter_access.sql`, `Tracked-changes.md`.
+
+**Manual steps:** none yet. Claude will apply the SQL once you approve the Supabase request.
+
+**Testing:** not yet. It will run once the SQL is applied.
+
+---
+
 ## 2026-11-18 · Profile & Settings: picture hint removed
 **Branch:** `dev` · **PR:** none yet · **Status:** Open
 

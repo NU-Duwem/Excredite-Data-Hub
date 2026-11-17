@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · One-time temporary passwords; login page redesign; visible Sign out
-**Branch:** `dev` · **PR:** #7 · **Status:** Open
+**Branch:** `dev` · **PR:** #8 · **Status:** Open
 
 **What and why:** You asked for:
 - a temporary password option, as in the earlier setup, that works only for a person's first sign-in;
@@ -87,7 +87,7 @@ On phones the sidebar is hidden, so until now there was no way to sign out, or t
 ---
 
 ## 2026-11-18 · Team photos; "Sign in with email"; only listed staff can sign in
-**Branch:** `dev` · **PR:** #7 · **Status:** Open
+**Branch:** `dev` · **PR:** #8 · **Status:** Open
 
 **What and why:** You sent the team photos, asked for the sign-in button to read "Sign in with email", and asked that only the five Microsoft 365 addresses you gave can get in, with no other email or kind of email.
 
@@ -145,7 +145,7 @@ On phones the sidebar is hidden, so until now there was no way to sign out, or t
 ---
 
 ## 2026-11-18 · Profile pictures; Sign in with Microsoft; company accounts only; Phillip Ekpo
-**Branch:** `dev` · **PR:** #7 · **Status:** Open
+**Branch:** `dev` · **PR:** #8 · **Status:** Open
 
 **What and why:** You asked for:
 - Phillip's name and role to be corrected;
@@ -209,7 +209,7 @@ On phones the sidebar is hidden, so until now there was no way to sign out, or t
 ---
 
 ## 2026-11-18 · Staff sign-in emails; shared admin account removed
-**Branch:** `dev` · **PR:** #7 · **Status:** Open
+**Branch:** `dev` · **PR:** #8 · **Status:** Open
 
 **What and why:** You asked for every staff account to use its short company address, and for the shared admin account to be removed. Two accounts also still signed in with the misspelling "expo" left over from `04_name_fix.sql`.
 
@@ -238,7 +238,7 @@ On phones the sidebar is hidden, so until now there was no way to sign out, or t
 ---
 
 ## 2026-11-18 · README rewritten to match the project
-**Branch:** `dev` · **PR:** #7 · **Status:** Open
+**Branch:** `dev` · **PR:** #7 · **Status:** Merged
 
 **What and why:** The README described features that don't exist (the Briefing Note Generator), left out most pages, numbered the setup steps out of order and showed the project structure as broken code fences. It now matches the app as it is.
 

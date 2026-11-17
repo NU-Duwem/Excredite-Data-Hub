@@ -16,8 +16,67 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-17 · Documents for the AI, step 2: bulk import tool and shared text extraction
+**Branch:** `dev` · **PR:** pending · **Status:** Open
+
+**What and why:** This is a command-line tool for loading the ~4 GB document collection. It runs on the computer that holds the files, starting with a few files, as you asked. Building it turned up a serious problem: **the PDF library (`pdf-parse`) can't read valid PDFs on this Node version** ("bad XRef entry" / "Invalid PDF structure"), so PDF processing in the app failed too. Both the app and the tool now use `pdfjs-dist`.
+
+**Changes:**
+- **`utils/extractText.ts` (new), shared by the app's processor and the import tool:**
+  - **PDF:** read page by page with real page numbers, using `pdfjs-dist`. Pages with almost no text are reported as probably scanned.
+  - **Word (`.docx`):** read in full.
+  - **PowerPoint (`.pptx`):** read slide by slide, straight from the slide files, with real slide numbers.
+  - **Excel and CSV:** read sheet by sheet.
+  - **Text and Markdown:** read as plain text.
+  - **Old `.doc`/`.ppt`:** reported with a "save as .docx/.pptx" message.
+  - **Chunking:** chunks of about 1,200 characters that end at sentence boundaries.
+- **App processor:**
+  - uses the shared extractor;
+  - records which pages had no text, in the notes and in `extracted_metadata`;
+  - no longer turns a scanned PDF into a fake chunk holding only the title.
+- **`frontend/scripts/import-documents.ts` (new), run with `npm run import-docs -- <folder>`:**
+  - **`--dry-run`:** measures files, pages, scanned pages, chunks, and estimated database and storage space, without uploading anything.
+  - **`--limit N`:** imports only the first N files, for a first small batch.
+  - **Skips duplicates:** by content hash, including identical copies in different folders in the same run, so a stopped run can be restarted.
+  - **Embeds before saving:** if embedding fails, nothing half-done is left in the database.
+  - **Uploads the originals,** unless `--text-only` is given or the file is over 50 MB.
+  - **Fills in each document:**
+    - title from the file name, and document type guessed from the name (or set with `--type`);
+    - classification from `--classification`, plus `--restricted`;
+    - source path, format, blank pages and model;
+    - each chunk keeps its page, slide or sheet.
+  - **Report:** one line per file, a summary, and a JSON report.
+- **`utils/importPlan.ts` (new):** the tool's command options, type guessing, safe storage paths and size estimates.
+- **Dependencies:** `jszip` added; `tsx` and `pdf-lib` added for development and tests.
+
+**Files:**
+- `frontend/utils/extractText.ts` (new)
+- `frontend/utils/importPlan.ts` (new)
+- `frontend/scripts/import-documents.ts` (new)
+- `frontend/utils/documentProcessor.ts`
+- `frontend/package.json` and `frontend/package-lock.json`
+- tests: `utils/__tests__/extractText.test.ts`, `utils/__tests__/importPlan.test.ts`
+- `README.md` (new "Bulk document import" section)
+- `Tracked-changes.md` (PR #3 marked Merged)
+
+**Manual steps:**
+- **On the computer with the documents:** pull this branch, run `npm install` in `frontend`, and make sure `.env.local` has the Supabase URL and service-role key.
+- **Then:** do a dry run, then `--limit 5` (see the README).
+
+**Tested:**
+- **Tests:** 214 Vitest tests pass. They include extraction tests on real PDF, Word, PowerPoint and Excel files built in memory, covering blank-page detection, page and slide numbers, sheet names and old-format handling, and tests for every tool option.
+- **Dry run on a sample folder:** a 3-page PDF with a blank page, a fully scanned PDF, a `.docx`, a `.pptx`, an `.xlsx`, an old `.doc` and a duplicate copy. Each file was classified correctly: 4 ready, 1 needs OCR, 1 unsupported, 1 duplicate.
+- **Real import against a stateful fake Supabase:**
+  - `--limit 3`, then a full run, then the same run again: the second run skipped the 2 files already imported, and the third imported nothing new.
+  - The saved documents had the right titles, guessed types and classifications.
+  - Every chunk had a real, non-zero 384-number embedding and the correct page, slide or sheet.
+  - The originals were uploaded under `imports/<hash>/`.
+- **Lint and type check:** both clean for the new code.
+
+---
+
 ## 2026-11-17 · Documents for the AI, step 1: free embeddings, real search, open access with admin restrictions, locked-down routes
-**Branch:** `dev` · **PR:** #3 · **Status:** Open
+**Branch:** `dev` · **PR:** #3 · **Status:** Merged
 
 **What and why:** This prepares the app for the bulk import of about 4 GB of documents. Checking the existing setup turned up these problems:
 - **Search by meaning had never worked:** all 46 stored chunk embeddings were zeros, because the Gemini embedding calls failed and the code silently saved placeholders.

@@ -7,7 +7,8 @@
     "build": "node --max-old-space-size=8192 node_modules/next/dist/bin/next build",
     "start": "node --max-old-space-size=8192 node_modules/next/dist/bin/next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "import-docs": "node --max-old-space-size=4096 node_modules/tsx/dist/cli.mjs scripts/import-documents.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
@@ -17,6 +18,7 @@
     "clsx": "^2.1.1",
     "docx-preview": "^0.4.0",
     "fast-xml-parser": "^4.5.7",
+    "jszip": "^3.10.2",
     "lucide-react": "^0.474.0",
     "mammoth": "^1.12.1",
     "next": "16.2.6",
@@ -38,7 +40,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "pdf-lib": "^1.17.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^3.2.7"
   }

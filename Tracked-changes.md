@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-17 · News feeds: power and energy sections instead of front pages
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #2 · **Status:** Open
 
 **What and why:** Most Nigerian outlets had brought in no power stories at all: BusinessDay, Daily Trust, Premium Times and Vanguard none, and Nairametrics 2. A newspaper's main feed carries its latest stories on every topic, so the few power stories scroll out before they're pulled. I tested each outlet's electricity tag or energy section with the app's own parser and power-news filter, without saving anything, and switched to those feeds.
 

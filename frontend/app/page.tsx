@@ -129,9 +129,10 @@ async function loadOverview(supabase: ReturnType<typeof createClient>): Promise<
     data.alerts = alertsRes.data.map((a: Record<string, unknown>) => {
       const subject = typeof a.plant_id === 'string' ? plantName.get(a.plant_id) : null;
       const kind = humanise(String(a.alert_type ?? a.source_type ?? 'Anomaly'));
+      const stored = typeof a.title === 'string' && a.title.trim() ? a.title.trim() : null;
       return {
         id: String(a.id),
-        title: subject ? `${kind} · ${subject}` : kind,
+        title: stored ?? (subject ? `${kind} · ${subject}` : kind),
         date: String(a.alert_date ?? ''),
       };
     });
@@ -367,7 +368,7 @@ export default function OverviewPage() {
 
           {/* Alerts */}
           <Tile
-            title="Anomaly alerts"
+            title="Alerts"
             action={
               data.openAlertCount !== null && (
                 <span className="font-mono text-xs bg-accent-soft text-accent-ink px-2 py-1 rounded-full">{data.openAlertCount} open</span>

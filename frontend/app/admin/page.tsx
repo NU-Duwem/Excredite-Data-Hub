@@ -35,7 +35,7 @@ const SECTIONS: { id: Section; label: string }[] = [
 const MODULES = [
   { id: 'query', name: 'AI Query' },
   { id: 'history', name: 'Conversation History' },
-  { id: 'alerts', name: 'Anomaly Alerts' },
+  { id: 'alerts', name: 'Alerts' },
   { id: 'documents', name: 'Documents' },
   { id: 'matters', name: 'Matters' },
   { id: 'news', name: 'News & Updates' },

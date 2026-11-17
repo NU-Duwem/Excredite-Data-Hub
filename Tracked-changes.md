@@ -16,6 +16,83 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-17 · "Anomaly Alerts" becomes "Alerts", rebuilt as a situation room
+**Branch:** `dev` · **PR:** pending · **Status:** Open
+
+**What and why:** The tab now covers everything the team must not miss, not only unusual power-plant output. That includes possible breaches of the law, urgent developments, contradictions between documents in the system, unusual grid data and problems with the system itself. The layout is design B, "Situation room", from the Anomaly Alerts canvas, and the tab is renamed **Alerts**.
+
+**Database (migration 13, already applied to the live database):**
+- **`anomaly_alerts` holds every kind of alert:**
+  - new fields: category, severity (Critical, High, Medium, Low), title, evidence (a list of sources with quotes), what it affects, a suggested next step, a dismissal reason, who reported it, and resolved and updated times;
+  - plant-only fields such as the output deviation are now optional, and the existing plant output alerts carry over unchanged.
+- **Access:**
+  - **Reporting:** anyone signed in can report an alert by hand, only as themselves, and it starts unassigned.
+  - **Triage:** the legal team, analysts, the CEO, admins and the app can take, assign, resolve, dismiss and reopen alerts, and so can whoever an alert is assigned to. Before, only admins, the app and the assignee could change alerts, so nobody could take an unassigned one.
+  - **Automatic alerts:** still written by admins, the app and the AI role.
+  - **Reading:** unchanged; every signed-in user can see alerts.
+- **Housekeeping:** a trigger keeps `updated_at`, `reviewed_at` and `resolved_at` up to date, and clears the dismissal reason when an alert is reopened.
+- **New `sync_system_alerts()`,** callable only by the server:
+  - after every news pull, it opens one alert per active feed whose last pull failed, never duplicates them, and resolves the alert once the feed works again or is switched off;
+  - the news ingestion route now calls it.
+- **Safety limits:** the database caps text lengths and the evidence size, and accepts only valid categories and severities.
+
+**Page (`/alerts`):**
+- **Critical banner:** open critical alerts as large cards, with **Take it** and **See evidence**. When there are none, it says "No critical alerts right now".
+- **Kind tiles:** one per kind of alert, with its open count and worst severity. Click one to filter the feed.
+- **Feed:** tabs for Open, Investigating, Resolved and Dismissed.
+- **Most alerts in the last 30 days:** the companies, plants and documents that keep coming up.
+- **Alert details:**
+  - evidence quotes with their sources; only http(s) links are ever shown, so a `javascript:` link in reported evidence is dropped;
+  - what it affects, the plant, document, linked job and news story;
+  - a suggested next step;
+  - actions: take it, assign, mark resolved, dismiss (a reason is required), reopen, **Add as task on job** (adds a task on the Regulatory & Advisory board), and **Ask AI**.
+- **Report an alert:** headline, kind, urgency, what it affects, an optional linked job, details, and an evidence link and quote.
+- **Who sees what:** general staff can report alerts and read them, but not act on them.
+- **Live updates:** the page refreshes when alerts change.
+- **Rename:** the sidebar, the Overview tile ("Alerts", now showing alert titles), the Admin module name and the README all say "Alerts".
+
+**Also fixed:** dialogs on Alerts and Regulatory & Advisory now close with Escape even after the button you clicked disappears, for example after Reopen or "Delete for good". Before, keyboard focus fell back to the page and Escape did nothing.
+
+**Not yet automatic:** spotting legal breaches and urgent developments in the news, and contradictions between documents, needs the AI layer. The categories, fields and access for that are ready, but for now these alerts come from people reporting them.
+
+**Files:**
+- `13_alerts.sql` (new)
+- `README.md`
+- `frontend/app/alerts/page.tsx`
+- `frontend/utils/alerts.ts` (new)
+- `frontend/utils/__tests__/alerts.test.ts` (new)
+- `frontend/app/components/Sidebar.tsx`
+- `frontend/app/page.tsx`
+- `frontend/app/admin/page.tsx`
+- `frontend/app/api/news/ingest/route.ts`
+- `frontend/app/matters/page.tsx` (the Escape fix)
+
+**Manual steps:**
+- **Other databases:** run `13_alerts.sql`. The live project already has it.
+
+**Tested:**
+- **Live database, in rolled-back transactions:**
+  - an analyst's report is saved;
+  - a user without a triage role can read alerts but not change them;
+  - an analyst can take, dismiss (with a reason), reopen (the reason is cleared) and resolve, and the timestamps are set;
+  - reporting as someone else, faking a system alert and an invalid severity are all refused;
+  - signed-in users can't run the feed check, and anonymous visitors see nothing;
+  - a failing feed opens one alert, a second run adds none, and the alert resolves when the feed recovers.
+- **Security advisor:** no new findings.
+- **Tests:** 189 Vitest tests pass, including 12 new ones for alerts: link safety, evidence, titles, sorting, tiles, the "most alerts" list, times and reports.
+- **Build and lint:** `next build` passes. Lint is clean except one error in `Sidebar.tsx` (setting state inside an effect) that was already there.
+- **Chromium, with a fake Supabase:**
+  - the banner, tiles, feed, status tabs and "most alerts" list;
+  - tile filtering, and the reasons on dismissed alerts;
+  - evidence, with the unsafe link not shown;
+  - take it, the dismiss-reason requirement, reopen, assign, adding a task to the job, the Ask AI link and resolve;
+  - reporting, with its error messages and the row it saves;
+  - general staff can only read and report;
+  - the empty state, and no sideways page scroll at 390px;
+  - the Regulatory & Advisory board test still passes, including Escape.
+
+---
+
 ## 2026-11-16 · Project moved to its own repository
 **Branch:** `dev` · **PR:** pending · **Status:** Open
 

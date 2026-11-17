@@ -71,6 +71,11 @@ async function handle(req: Request) {
       `News ingest (${fromScheduler ? 'schedule' : 'manual'}): ${summary.inserted} new articles from ${summary.sources} sources (${summary.failed} failed)`,
     );
 
+    // Open an alert for each feed that failed, and resolve alerts for feeds that work again.
+    await admin
+      .rpc('sync_system_alerts')
+      .then(({ error }) => error && console.warn('News ingest: could not update feed alerts:', error.message));
+
     if (user) {
       await admin
         .from('user_activity_log')

@@ -16,6 +16,19 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Login page wording
+**Branch:** `dev` · **PR:** #9 · **Status:** Open
+
+**What and why:** You asked to drop "work" from the login line. It now reads "Use your Excredite email (@excredite.ng)."
+
+**Files:** `frontend/app/login/page.tsx`, `Tracked-changes.md`.
+
+**Manual steps:** none.
+
+**Testing:** text-only change, checked in the file.
+
+---
+
 ## 2026-11-18 · ⚠️ Development-only master password (remove before deployment)
 **Branch:** `dev` · **PR:** #9 · **Status:** Open
 

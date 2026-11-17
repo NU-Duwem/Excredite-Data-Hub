@@ -241,7 +241,7 @@ function LoginForm() {
             {mode === 'main' ? (
               <>
                 <h2 className="text-2xl font-extrabold tracking-tight text-gray-900">Sign in</h2>
-                <p className="mt-1.5 text-sm text-gray-600">Use your Excredite work email (@excredite.ng).</p>
+                <p className="mt-1.5 text-sm text-gray-600">Use your Excredite email (@excredite.ng).</p>
               </>
             ) : (
               <>

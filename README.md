@@ -1,149 +1,285 @@
-# Excredite Power Data Hub (EPDH)
+# Excredite Electricity Data Hub (EPDH)
 
-The **Excredite Power Data Hub (EPDH)** is a secure, centralized analytics and intelligence platform built exclusively for Nigeria's electricity sector. It serves as an internal tool for power analysts, regulatory teams, and executives to query industry data, generate automated briefing notes, and monitor anomaly alerts across Generation Companies (GENCOs), Distribution Companies (DISCOs), and the Transmission Company of Nigeria (TCN).
+The **Excredite Electricity Data Hub (EPDH)** is Excredite's internal intelligence platform for Nigeria's electricity sector. The legal, research and executive teams use it to:
+
+- ask questions in plain English, answered from the firm's own documents;
+- keep a searchable, access-controlled library of regulatory orders, judgments, tariffs, reports and briefs;
+- follow power-sector news;
+- run the firm's regulatory and advisory jobs, with tasks, owners and deadlines;
+- catch anything that needs attention, through Alerts.
 
 ---
 
-## 🏗 Architecture Overview
+## 🏗 Architecture
 
-EPDH is built on a modern, serverless stack designed for high security and performance:
-
-- **Frontend:** [Next.js 16](https://nextjs.org/) (App Router) + React 19
-- **Styling:** [Tailwind CSS v4](https://tailwindcss.com/)
-- **Backend & Database:** [Supabase](https://supabase.com/) (Managed PostgreSQL)
-- **Authentication:** Supabase Auth (Strict Admin-only provisioning)
-- **Deployment:** Vercel (Frontend) & Supabase Platform (Backend/Edge Functions)
+| Layer | What it uses |
+|---|---|
+| Frontend | [Next.js 16](https://nextjs.org/) (App Router, webpack) and React 19, in `frontend/` |
+| Styling | [Tailwind CSS v4](https://tailwindcss.com/) and Lucide icons; charts with Recharts |
+| Database | [Supabase](https://supabase.com/) PostgreSQL with Row Level Security on every table |
+| Auth | Supabase Auth. Roles are stored in `user_profiles` and only admins or the server can set them |
+| Document search | pgvector (384 dimensions, HNSW index) plus full-text search in one hybrid search function |
+| Embeddings | `gte-small`, run locally by `@huggingface/transformers`. It's free and needs no API key |
+| AI answers | Claude (Anthropic) or Gemini (Google). Claude defaults to `claude-opus-5-5`, with automatic fallback |
+| Text extraction | pdfjs-dist (PDF), mammoth (Word), jszip (PowerPoint), xlsx (Excel/CSV) |
+| News | RSS feeds pulled by `pg_cron` and `pg_net`, or on demand from the app |
+| Edge functions | `admin-invite-user` and `generate-signed-url`, in `supabase/functions/` |
+| Hosting | Vercel for the frontend (not deployed yet) and the Supabase platform for the backend |
 
 ---
 
 ## 🚀 Features
 
-- **AI Query Interface:** Plain-text querying interface for querying grid generation, tariffs, and regulations.
-- **Briefing Note Generator:** Automated engine to compile data into a 6-part executive summary structure.
-- **Alerts:** One place for anything the team must not miss: possible breaches of the law, urgent developments, contradictions between documents, unusual grid data and system problems. Critical alerts are shown first; anyone can report one.
-- **Document Registry:** Secure repository for regulatory filings and legal matters, utilizing Row Level Security (RLS) for data isolation.
-- **Administrative Access Control:** Strictly closed system with Role-Based Access Control (RBAC). Self-registration is disabled.
+The sidebar has these pages:
+
+- **Overview** (`/`): a bento dashboard with daily generation, installed capacity, open alerts, the next deadlines, document processing and the latest news.
+- **AI Query Interface** (`/query`): ask questions about the sector. Answers come only from documents you're allowed to read, with citations to the document and page.
+- **Conversation History** (`/history`): past AI conversations, which you can search, reopen, rename or delete.
+- **Documents** (`/documents`): the document library.
+  - Upload PDF, Word, PowerPoint, Excel, CSV, text or Markdown files. A confirmation panel shows the upload, the text extraction and when the document is ready for AI search.
+  - Classifications: Public, Internal and Legal-Privileged. Every signed-in user can read every document unless an admin marks it **Restricted**; then only admins and the people they grant access can read it.
+  - Preview, download, edit details, re-process and bulk delete.
+  - Bulk import from a folder with `npm run import-docs` (see below).
+- **News & Updates** (`/news`): power-sector news from RSS feeds, with topic filters and **Refresh feeds**.
+- **Regulatory & Advisory Matters** (`/matters`): a work board of the firm's jobs. Each job has a lead, a timeline and tasks, and each task has an assignee (one person or the whole team), a due date and a status.
+- **Alerts** (`/alerts`): one place for anything the team must not miss:
+  - possible breaches of the law;
+  - urgent developments;
+  - contradictions between documents;
+  - unusual grid or market data;
+  - system problems, such as a failing news feed.
+
+  Alerts carry a severity and evidence, and critical ones are shown first. Anyone can report one, and the legal team, analysts, the CEO and admins triage them.
+- **Admin Panel** (`/admin`), for admins only:
+  - create users, change roles and suspend accounts;
+  - reset passwords and use "Sign out everywhere";
+  - read the activity log;
+  - change system settings;
+  - manage access to restricted documents.
+- **Profile & Settings** (`/profile`): your details, password and preferences.
+
+**Roles:** System Admin, CEO, Legal Team, Research Analyst, Data Ingestion and General Staff. New accounts start as General Staff.
 
 ---
 
-## 🛠 Local Setup & Installation
+## 🛠 Local Setup
 
 ### Prerequisites
-- Node.js (v18+)
-- npm
-- A Supabase Project
+- Node.js 20 or later (22 is recommended), and npm
+- A Supabase project. The Free plan is enough to start
 
-### 1. Database Setup (Supabase)
-To set up the database schema and RLS policies, execute the SQL files in your Supabase SQL Editor in the following order:
-1. `schema.sql` - Provisions the core tables (organizations, plants, telemetry, matters).
-2. `01_supabase_backend_setup.sql` - Configures `user_profiles`, database triggers, and all Row Level Security (RLS) policies.
-3. `02_seed_data.sql` - Seeds initial Nigerian power sector data (States, GENCOs, DISCOs, TCN).
-4. `03_epdh_updates.sql` to `06_document_embeddings_setup.sql` - Settings, activity log, news, matters and document embeddings.
-5. `07_news_ingestion.sql` and `08_news_schedule.sql` - RSS news feeds and the hourly pull (see step 5 below).
-6. `09_security_hardening.sql` - Fixes the Supabase security advisor findings. After this, new SQL must call `private.get_user_role()`; `public.get_user_role()` no longer exists.
-7. `10_news_topics.sql` - Topic tags on news articles, used by the News & Updates filters.
-8. `11_user_roles_lockdown.sql` - Stops users changing their own role or status, takes the signup role only from server-set `app_metadata`, and adds `force_logout_user()` for the Admin Panel's "Sign out everywhere". Afterwards redeploy the `admin-invite-user` edge function (`supabase functions deploy admin-invite-user`).
-9. `12_matter_tasks.sql` - Tasks on Regulatory & Advisory jobs (the work board): the `matter_tasks` table, a job lead linked to a real user, `list_matter_people()` for assignee names, and edit rights on jobs and tasks for the legal team.
-10. `13_alerts.sql` - Turns Anomaly Alerts into Alerts: categories (legal & compliance, urgent developments, document contradictions, grid & data, system), severity, evidence, hand-filed reports by any signed-in user, triage by the legal team, analysts, the CEO and admins, and automatic alerts for failing news feeds.
-11. `14_news_sources_sections.sql` - Points five Nigerian outlets at their electricity or energy feeds instead of their front pages, and adds Premium Times' NERC feed. Far more power stories get through.
-12. `15_document_access_and_search.sql` - Every signed-in user can read every document unless an admin marks it **Restricted** (then only admins and people they grant access). Switches document search to free, local `gte-small` embeddings (384 dimensions) with a meaning + keyword search function. Afterwards, open each existing document and click **Re-process** so it is embedded with the new model.
-13. In the dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**. This is not available in SQL, and needs a paid Supabase plan.
+### 1. Database
+Run these files in the Supabase **SQL Editor**, in this order. Each one is safe to run once.
 
-### 2. Frontend Setup
-Navigate to the frontend directory:
+| # | File | What it does |
+|---|---|---|
+| 1 | `schema.sql` | Core tables: organisations, plants, telemetry, matters, documents |
+| 2 | `01_supabase_backend_setup.sql` | `user_profiles`, the signup trigger and Row Level Security policies |
+| 3 | `02_seed_data.sql` | Seed data: states, GENCOs, DISCOs and TCN |
+| 4 | `03_epdh_updates.sql` | System settings, the activity log, news and matters |
+| 5 | `04_name_fix.sql` | A one-off correction to seeded user names |
+| 6 | `05_db_updates.sql` | Custom document types and seed data for matters |
+| 7 | `06_document_embeddings_setup.sql` | pgvector and document chunks |
+| 8 | `07_news_ingestion.sql` | News sources and the feed list |
+| 9 | `08_news_schedule.sql` | `pg_cron` and `pg_net`, a Vault cron secret and the hourly pull (see **News** below) |
+| 10 | `09_security_hardening.sql` | Fixes the Supabase security advisor findings and moves `get_user_role()` into the `private` schema |
+| 11 | `10_news_topics.sql` | Topic tags for the News & Updates filters |
+| 12 | `11_user_roles_lockdown.sql` | Users can't change their own role or status; adds `force_logout_user()` |
+| 13 | `12_matter_tasks.sql` | Tasks on jobs, job leads and edit rights for the legal team |
+| 14 | `13_alerts.sql` | Alert categories, severity, evidence, reporting, triage and automatic feed alerts |
+| 15 | `14_news_sources_sections.sql` | Points outlets at their power and energy feeds |
+| 16 | `15_document_access_and_search.sql` | Restricted documents and access grants; `gte-small` embeddings with hybrid search |
+
+**After running the SQL:**
+- Deploy the edge functions with the [Supabase CLI](https://supabase.com/docs/guides/cli):
+
+  ```bash
+  supabase functions deploy admin-invite-user
+  ```
+
+  ```bash
+  supabase functions deploy generate-signed-url
+  ```
+- **If you're upgrading an existing database to `15_…`:** open each existing document and click **Re-process**, so it is embedded with the new model.
+- **Optional, paid plans only:** turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**.
+
+> **Rules for new SQL:**
+> - Role checks call `private.get_user_role()`. `public.get_user_role()` no longer exists; don't recreate it.
+> - New `SECURITY DEFINER` functions set `search_path = ''`, schema-qualify every name and revoke `EXECUTE` from `PUBLIC`, `anon` and `authenticated`.
+> - Run the Supabase security advisor afterwards.
+>
+> See `CLAUDE.md`.
+
+### 2. Install
 ```bash
 cd frontend
 ```
 
-Install dependencies:
 ```bash
 npm install
 ```
-*(Note: If you are on Windows and experience native dependency errors, run `npm install --webpack` or force-install the native bindings like `@next/swc-win32-x64-msvc` if interrupted).*
 
-### 3. Environment Variables
-Create a `.env.local` file in the `frontend` directory with your Supabase credentials:
+### 3. Environment variables
+Create `frontend/.env.local`. **Never commit it.**
+
 ```env
+# Supabase (Project Settings → API)
 NEXT_PUBLIC_SUPABASE_URL=https://<your-project-id>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_publishable_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key     # server-side API routes only
-GEMINI_API_KEY=your_gemini_key                      # and/or ANTHROPIC_API_KEY (answers questions; Claude defaults to claude-opus-5-5)
-# Document search embeddings need no key: the free gte-small model (~34 MB) downloads
-# from Hugging Face on first use. Optional: EMBEDDINGS_CACHE_DIR=/path/to/cache
-CRON_SECRET=a_long_random_string                    # protects /api/news/ingest
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key   # server only: API routes and the import tool
+
+# AI answers: set at least one
+ANTHROPIC_API_KEY=your_anthropic_key              # Claude
+GEMINI_API_KEY=your_gemini_key                    # Gemini
+# Optional model overrides
+# ANTHROPIC_MODEL=claude-opus-5-5
+# GEMINI_MODEL=gemini-2.5-flash
+
+# News: protects /api/news/ingest (see News below)
+CRON_SECRET=a_long_random_string
+
+# Optional
+# NEXT_PUBLIC_SITE_URL=https://your-app-domain     # used in password-reset emails (default http://localhost:3000)
+# EMBEDDINGS_CACHE_DIR=/path/to/cache              # where the gte-small model is stored
 ```
 
-### Running the tests
-```bash
-cd frontend
-npm test
-```
+Document search needs no key. The free `gte-small` model (about 34 MB) downloads from Hugging Face the first time it's used.
 
-### 6. Bulk document import (for the AI)
-Run this on the computer that holds the documents, from the `frontend` folder, with `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `frontend/.env.local`.
-
-1. **Dry run first.** It reads and measures every file, and nothing is uploaded or saved:
-   `npm run import-docs -- "C:\path\to\folder" --dry-run`
-   It reports:
-   - files ready to import, files already imported, files that need OCR (scanned), and unsupported files;
-   - pages without text;
-   - chunks, estimated database space and estimated storage space.
-2. **Start small:** `npm run import-docs -- "C:\path\to\folder" --limit 5`
-3. **Then the rest:** run it again without `--limit`. Files already imported are skipped by their content, so a stopped run can be restarted.
-
-**Useful options:**
-- `--classification PUBLIC|INTERNAL|LEGAL_PRIVILEGED`
-- `--type REGULATORY_ORDER|COURT_JUDGMENT|…` (by default it's guessed from the file name)
-- `--restricted`
-- `--text-only`, which skips uploading the originals and saves storage on the Free plan
-- `--help`
-
-**What the tool reads:** PDF (page by page), Word `.docx`, PowerPoint `.pptx` (slide by slide), Excel `.xlsx`/`.xls`, `.csv`, `.txt` and `.md`. Old `.doc`/`.ppt` files must first be saved in the newer format. Scanned pages are reported but not read yet (OCR is a later step).
-
-**First run:** it downloads the free `gte-small` model (~34 MB). Each run writes a JSON report.
-
-### 5. News ingestion (RSS)
-1. Run `07_news_ingestion.sql`, then `08_news_schedule.sql`, in the Supabase SQL Editor. Together they:
-   - create `news_sources` and seed the feed list;
-   - switch on `pg_cron` and `pg_net`;
-   - store a randomly generated cron secret in Supabase Vault;
-   - schedule an hourly pull at 7 minutes past each hour.
-2. Once the app is deployed, connect the hourly job to it:
-   - Set its address: `UPDATE public.system_settings SET value = 'https://<your-app-domain>' WHERE key = 'news_ingest_url';`
-   - Copy the generated secret into the app's `CRON_SECRET` environment variable. Read it with `SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'epdh_cron_secret';`.
-
-   Until the address is set, the hourly job runs but does nothing.
-3. Any signed-in user can pull immediately: **Refresh feeds** on News & Updates, or the refresh icon on the Overview's "Latest news" tile. Only one manual pull runs per 5 minutes across everyone.
-4. Add, remove or pause feeds in the `news_sources` table. Use `filter_by_keywords = true` for general news sites, so only electricity stories are kept.
-5. `frontend/vercel.json` also schedules a daily pull as a backup when hosted on Vercel. It's harmless to keep, and safe to delete.
-
-### 4. Running the Application
-Start the Next.js development server:
+### 4. Run
 ```bash
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+Open [http://localhost:3000](http://localhost:3000).
+
+**Other scripts, run from `frontend/`:**
+
+| Command | What it does |
+|---|---|
+| `npm run build`, then `npm start` | Production build and server |
+| `npm test` | Unit tests (Vitest) |
+| `npm run lint` | ESLint |
+| `npm run import-docs -- <folder>` | Bulk document import (see below) |
+
+`dev` uses webpack (`next dev --webpack`). The PDF reader and the embedding model are loaded by Node at run time instead of being bundled; see `serverExternalPackages` in `next.config.ts`.
 
 ---
 
-## 🔐 Security & User Provisioning
+## 📥 Bulk document import (for the AI)
 
-EPDH is a secure B2B tool. **Public sign-up is intentionally disabled.** 
-To access the platform locally:
-1. Go to your Supabase Dashboard -> **Authentication** -> **Users**.
-2. Click **Add User** -> **Create New User**.
-3. Provide an email and password, ensuring **Auto Confirm User** is checked.
-4. Log into the EPDH portal at `/login` using these credentials.
+Run this on the computer that holds the documents. Run it from `frontend/`, with `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `frontend/.env.local`.
+
+1. **Dry run first.** It reads and measures every file, but uploads and saves nothing:
+
+   ```bash
+   npm run import-docs -- "C:\path\to\folder" --dry-run
+   ```
+
+   The report lists:
+   - files ready to import, files already imported, scanned files that need OCR, and unsupported files;
+   - pages without text;
+   - the number of chunks, and the estimated database and storage space.
+2. **Start small:**
+
+   ```bash
+   npm run import-docs -- "C:\path\to\folder" --limit 5
+   ```
+3. **Then import the rest:** run it again without `--limit`. Files already imported are recognised by their content and skipped, so a stopped run can simply be restarted.
+
+**Options:**
+
+| Option | Meaning |
+|---|---|
+| `--dry-run` | Read and measure only |
+| `--limit N` | Only the first N files, in alphabetical order |
+| `--classification X` | `PUBLIC`, `INTERNAL` (the default) or `LEGAL_PRIVILEGED` |
+| `--type X` | The document type for every file. By default it's guessed from the file name |
+| `--restricted` | Mark the imported documents Restricted |
+| `--text-only` | Don't upload the original files. This saves storage, but the library can't show or download them |
+| `--uploaded-by EMAIL` | Recorded as the uploader (default `bulk-import`) |
+| `--report FILE` | Where to write the JSON report |
+| `--help` | Show help |
+
+**Supported files:**
+- PDF, read page by page;
+- Word `.docx`;
+- PowerPoint `.pptx`, read slide by slide;
+- Excel `.xlsx` and `.xls`, `.csv`, `.txt` and `.md`.
+
+Old `.doc` and `.ppt` files must first be saved in the newer format. Scanned pages are reported but not read yet, because OCR is a later step.
+
+Files uploaded on the **Documents** page go through the same extraction and embedding.
+
+---
+
+## 📰 News (RSS)
+
+1. `07_news_ingestion.sql` and `08_news_schedule.sql`:
+   - create `news_sources` and seed the feed list;
+   - switch on `pg_cron` and `pg_net`;
+   - store a random cron secret in Supabase Vault;
+   - schedule an hourly pull at 7 minutes past the hour.
+2. **Once the app is deployed**, connect the hourly job to it:
+   - Set the app's address:
+
+     ```sql
+     UPDATE public.system_settings SET value = 'https://<your-app-domain>' WHERE key = 'news_ingest_url';
+     ```
+   - Copy the Vault secret into the app's `CRON_SECRET`. You can read it with:
+
+     ```sql
+     SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'epdh_cron_secret';
+     ```
+
+   Until the address is set, the hourly job runs but does nothing.
+3. **Pulling on demand:** any signed-in user can click **Refresh feeds** on News & Updates, or the refresh icon on the Overview's news tile. Only one manual pull runs every 5 minutes, across all users.
+4. **Managing feeds:** add, remove or pause feeds in `news_sources`. Set `filter_by_keywords = true` for general news sites, so only electricity stories are kept.
+5. `frontend/vercel.json` also schedules a daily pull on Vercel, as a backup.
+
+---
+
+## 🧪 Tests
+
+```bash
+cd frontend
+```
+
+```bash
+npm test
+```
+
+Vitest covers:
+- text extraction;
+- import planning;
+- embeddings;
+- document access;
+- alerts;
+- matter tasks;
+- query turns;
+- chat sessions;
+- news parsing, relevance, topics and cooldowns.
+
+Tests that download the embedding model are skipped unless `RUN_MODEL_TESTS=1` is set.
+
+---
+
+## 🔐 Security & user accounts
+
+- **Adding users:** admins add users, with a role and a starting password, from the **Admin Panel**. This uses the server's service-role key. Admins can also send a password-reset email from there.
+- **Self-registration:** the `/signup` page only works while **Authentication → Sign In / Providers → Allow new users to sign up** is on in Supabase. Accounts created there start as **General Staff**, and only an admin can change a role. To keep the platform closed, turn that setting off.
+- **Data access:** Row Level Security protects every table. The AI only searches documents the person asking is allowed to read.
+- **API routes:** every route checks the signed-in user and their role on the server. Roles are never taken from browser-supplied data.
+- **Keys:** the service-role key and AI keys stay on the server. Never put them in a `NEXT_PUBLIC_` variable.
 
 ---
 
 ## 📚 Documentation
 
-Project documents live in [`docs/`](docs/):
+Project documents are in [`docs/`](docs/):
 
 - **`docs/frontend/`**
   - **Frontend Requirements** (`.docx`): what each page must do.
-  - **Frontend Improvement Log** (`.docx`): required and recommended changes after reviewing the app against the requirements.
+  - **Frontend Improvement Log** (`.docx`): required and recommended changes, from a review of the app against the requirements.
   - **`frontend improvement.md`**: the May 2026 refinement log.
   - **`conti.md`**: requested updates to Profile & Settings and other pages.
 - **`docs/technical/`**
@@ -154,28 +290,38 @@ The full history of code and database changes is in [`Tracked-changes.md`](Track
 
 ---
 
-## 📂 Project Structure
+## 📂 Project structure
 
-\`\`\`text
+```text
 .
-├── frontend/               # Next.js Application
-│   ├── app/                # Next.js App Router (Pages & Layouts)
-│   │   ├── alerts/         # Alerts (situation room)
-│   │   ├── briefing/       # Briefing Note Generator
-│   │   ├── components/     # Reusable UI Components (Sidebar, etc.)
-│   │   ├── documents/      # Document Registry
-│   │   ├── login/          # Supabase Authentication View
-│   │   └── query/          # AI Query Interface (Main View)
-│   └── utils/
-│       └── supabase/       # Supabase SSR Client & Server Utilities
-├── supabase/               # Supabase Edge Functions & Configurations
-├── schema.sql              # Core PostgreSQL Tables & Relationships
-├── 01_supabase_backend_setup.sql # RLS Policies & User Profiles
-└── 02_seed_data.sql        # Initial Nigerian Power Sector Seed Data
-\`\`\`
+├── frontend/                     # Next.js app
+│   ├── app/
+│   │   ├── page.tsx              # Overview
+│   │   ├── query/                # AI Query Interface
+│   │   ├── history/              # Conversation History
+│   │   ├── documents/            # Document library, upload, access control
+│   │   ├── news/                 # News & Updates
+│   │   ├── matters/              # Regulatory & Advisory work board
+│   │   ├── alerts/               # Alerts
+│   │   ├── admin/                # Admin Panel
+│   │   ├── profile/              # Profile & Settings
+│   │   ├── login/ signup/ forgot-password/ reset-password/
+│   │   ├── components/           # Sidebar
+│   │   └── api/                  # Server routes: chat, documents, news ingest, admin users
+│   ├── utils/                    # Extraction, embeddings, access, alerts, news, Supabase clients (+ __tests__)
+│   ├── scripts/import-documents.ts   # Bulk import tool
+│   ├── next.config.ts
+│   └── vercel.json               # Daily news pull on Vercel
+├── supabase/functions/           # Edge functions: admin-invite-user, generate-signed-url
+├── schema.sql                    # Core tables
+├── 01_… to 15_….sql              # Migrations, run in order (see Local Setup)
+├── docs/                         # Requirements and technical documentation
+├── Tracked-changes.md            # Change log
+└── CLAUDE.md                     # Rules for branches, the change log and SQL
+```
 
 ---
 
 ## 📝 License
 
-Proprietary & Confidential. All rights reserved by Excredite.
+Proprietary and confidential. All rights reserved by Excredite.

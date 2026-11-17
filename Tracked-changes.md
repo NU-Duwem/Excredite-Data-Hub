@@ -16,8 +16,39 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · README rewritten to match the project
+**Branch:** `dev` · **PR:** #7 · **Status:** Open
+
+**What and why:** The README described features that don't exist (the Briefing Note Generator), left out most pages, numbered the setup steps out of order and showed the project structure as broken code fences. It now matches the app as it is.
+
+**Changes to `README.md`:**
+- **Intro and architecture:** an accurate description, plus an architecture table covering the AI providers, free local `gte-small` embeddings, hybrid search, text extraction, news and the edge functions.
+- **Features:** every sidebar page (Overview, AI Query, Conversation History, Documents, News & Updates, Regulatory & Advisory Matters, Alerts, Admin Panel and Profile & Settings), plus the roles. The Briefing Note Generator was removed.
+- **Setup:**
+  - correctly numbered steps;
+  - a full SQL run order from `schema.sql` through `15_…`, including `04`, `05` and `06`;
+  - edge function deploy commands;
+  - the SQL rules from `CLAUDE.md`.
+- **Environment variables:** every variable the code reads, including the optional `ANTHROPIC_MODEL`, `GEMINI_MODEL`, `NEXT_PUBLIC_SITE_URL` and `EMBEDDINGS_CACHE_DIR`.
+- **New sections:**
+  - a scripts table;
+  - bulk import with an options table;
+  - News (RSS);
+  - Tests;
+  - Security & user accounts. These describe how admins add users and how to keep `/signup` closed.
+- **Project structure:** an accurate tree in a properly fenced block.
+- **Removed:** the misleading Windows `npm install --webpack` note.
+
+**Files:** `README.md`, `Tracked-changes.md` (also marks PR #6 Merged).
+
+**Manual steps:** none.
+
+**Testing:** documentation only. Every page, route, script, environment variable, SQL file and test file named in the README was checked against the code.
+
+---
+
 ## 2026-11-18 · Clear upload confirmation; project documents moved into `docs/`
-**Branch:** `dev` · **PR:** #6 · **Status:** Open
+**Branch:** `dev` · **PR:** #6 · **Status:** Merged
 
 **What and why:**
 1. **Upload confirmation.** After a successful upload the page used to show one small line of green text for 2 seconds, then cleared the form. That was easy to miss, and it said nothing about whether processing worked.

@@ -16,8 +16,48 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-17 · News feeds: power and energy sections instead of front pages
+**Branch:** `dev` · **PR:** #2 · **Status:** Open
+
+**What and why:** Most Nigerian outlets had brought in no power stories at all: BusinessDay, Daily Trust, Premium Times and Vanguard none, and Nairametrics 2. A newspaper's main feed carries its latest stories on every topic, so the few power stories scroll out before they're pulled. I tested each outlet's electricity tag or energy section with the app's own parser and power-news filter, without saving anything, and switched to those feeds.
+
+| Outlet | Main feed: power stories | New feed | New feed: power stories |
+|---|---|---|---|
+| Vanguard | 1 | electricity tag | 19 |
+| Daily Trust | 0 | electricity tag | 14 |
+| Premium Times | 0 | electricity tag | 8 (15 with the filter off) |
+| Nairametrics | 0 | energy section | 9, all from the last 30 days |
+| BusinessDay | 0 | energy section | 2 |
+| Premium Times (NERC), new | – | NERC tag | 15 |
+
+- **Keyword filter:**
+  - **Off for tag feeds:** the outlet has already tagged the story as electricity or NERC news.
+  - **On for energy sections:** they also cover oil and gas.
+- **Existing stories** stay linked to their outlet.
+- **Checked and left as they are:**
+  - **Blocking automated requests:** Channels TV, The Guardian Nigeria, The Nation, ESI Africa and Energy Voice. Some of them returned 403 to the app's bot identity but not to a generic one; the app respects these blocks and doesn't pretend to be a browser.
+  - **Punch:** no tag feed found.
+  - **ThisDay:** its power tag has nothing newer than 2024.
+  - **NERC's own website feed:** its newest item is from July 2025.
+  - **Google News search feeds:** they refused requests from this shared server, and Google's terms restrict automated use.
+- **Pulls still aren't running hourly:** the hourly job has no address to call until the app is deployed (`news_ingest_url` is empty). So the new feeds bring in stories only when someone clicks Refresh feeds in a running copy of the app.
+
+**Files:**
+- `14_news_sources_sections.sql` (new)
+- `README.md`
+- `Tracked-changes.md` (PR #1 marked Merged)
+
+**Manual steps:**
+- **Other databases:** run `14_news_sources_sections.sql`. The live project already has it.
+
+**Tested:**
+- **Before the change:** a dry run of the app's parser and power-news filter against every old and new feed. It fetched them through the same identity the app uses and saved nothing; the results are in the table above.
+- **After applying it to the live database:** the local sources list shows the new addresses and filter settings.
+
+---
+
 ## 2026-11-17 · "Anomaly Alerts" becomes "Alerts", rebuilt as a situation room
-**Branch:** `dev` · **PR:** #1 · **Status:** Open
+**Branch:** `dev` · **PR:** #1 · **Status:** Merged
 
 **What and why:** The tab now covers everything the team must not miss, not only unusual power-plant output. That includes possible breaches of the law, urgent developments, contradictions between documents in the system, unusual grid data and problems with the system itself. The layout is design B, "Situation room", from the Anomaly Alerts canvas, and the tab is renamed **Alerts**.
 
@@ -94,7 +134,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-16 · Project moved to its own repository
-**Branch:** `dev` · **PR:** #1 · **Status:** Open
+**Branch:** `dev` · **PR:** #1 · **Status:** Merged
 
 **What and why:** The project now lives on its own in **NU-Duwem/Excredite-Data-Hub**. Before, it was **NU-Duwem/EPDH-UPDATED**, a fork of another repository; the move makes it standalone.
 

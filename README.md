@@ -150,6 +150,11 @@ CRON_SECRET=a_long_random_string
 # (see docs/technical/microsoft-365-sign-in.md)
 # NEXT_PUBLIC_MICROSOFT_SIGN_IN=true
 
+# ⚠️ DEVELOPMENT ONLY: a master password that signs in as any listed account
+# (at least 16 characters). Works only with `npm run dev`; `npm run build` and
+# `npm start` refuse to run while it is set. REMOVE BEFORE DEPLOYMENT.
+# DEV_MASTER_PASSWORD=
+
 # Optional
 # NEXT_PUBLIC_SITE_URL=https://your-app-domain     # used in password-reset emails (default http://localhost:3000)
 # EMBEDDINGS_CACHE_DIR=/path/to/cache              # where the gte-small model is stored
@@ -174,6 +179,23 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm run import-docs -- <folder>` | Bulk document import (see below) |
 
 `dev` uses webpack (`next dev --webpack`). The PDF reader and the embedding model are loaded by Node at run time instead of being bundled; see `serverExternalPackages` in `next.config.ts`.
+
+---
+
+## 🚦 Before deployment
+
+Work through this list before the app goes live:
+
+1. **⚠️ Remove the development master password.**
+   - Delete `DEV_MASTER_PASSWORD` from `frontend/.env.local`, and make sure it is not in the hosting settings.
+   - `npm run build` refuses to run while it's set, which is your reminder.
+   - Remove the feature itself:
+     - delete `frontend/app/api/auth/dev-master-sign-in/` and `frontend/utils/devMaster.ts` (and its test);
+     - delete the "Developer sign-in" parts of `frontend/app/login/page.tsx`;
+     - delete the guard at the top of `frontend/next.config.ts`.
+2. **Retire old passwords** once everyone uses Sign in with email: step 6 in [`docs/technical/microsoft-365-sign-in.md`](docs/technical/microsoft-365-sign-in.md).
+3. **Point the hourly news pull at the deployed address** (see **News** below), and set `CRON_SECRET`.
+4. **Set the Site URL and redirect URLs** in Supabase to the live address (Part 2 of the sign-in guide).
 
 ---
 
@@ -281,6 +303,7 @@ Tests that download the embedding model are skipped unless `RUN_MODEL_TESTS=1` i
 - **Sign in with email:** once your Microsoft 365 admin registers EPDH, the login page shows a single **Sign in with email** button. Behind it, staff sign in with their Excredite Microsoft 365 account. Their first sign-in links to their existing EPDH account by email. Setup steps are in [`docs/technical/microsoft-365-sign-in.md`](docs/technical/microsoft-365-sign-in.md), which also covers sending EPDH's emails from `noreply@excredite.ng`.
 - **Adding users:** admins use **Add user** in the **Admin Panel** (service-role key on the server). EPDH shows a **temporary password** once: it works for the person's **first sign-in only**, expires after 3 days and locks after 5 wrong tries. Only a hash is stored. The person chooses **First time? Use a temporary password** on the login page. Admins can issue a new one at any time with **Issue temporary password**; the old one stops working.
 - **After the first sign-in:** people use **Sign in with email** (Microsoft 365). Until that's switched on, they're asked to choose their own password straight after their first sign-in.
+- **⚠️ Development master password:** while developing, `DEV_MASTER_PASSWORD` in `frontend/.env.local` lets you sign in as any listed, active account through **Developer sign-in** on the login page. The page shows an amber "Development mode" warning while it's on. It never works in a production build or deployment, but remove it before going live (see **Before deployment**).
 - **Signing out:** **Sign out** is at the bottom of the sidebar on computers, and in the top bar on phones.
 - **Self-registration:** the `/signup` page only works while **Authentication → Sign In / Providers → Allow new users to sign up** is on in Supabase. Accounts created there start as **General Staff**, and only an admin can change a role. To keep the platform closed, turn that setting off.
 - **Data access:** Row Level Security protects every table. The AI only searches documents the person asking is allowed to read.

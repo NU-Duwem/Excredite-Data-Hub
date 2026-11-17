@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Overview rebuilt around regularly updated data
-**Branch:** `dev` · **PR:** none yet · **Status:** Open
+**Branch:** `dev` · **PR:** #11 · **Status:** Open
 
 **What and why:** You asked for the Overview to use data that is updated regularly instead of generation data, which isn't readily available. The newest generation record in the database is from 30 June 2024, so the "Daily generation" chart and the "Installed capacity" tile were showing old figures.
 
@@ -53,7 +53,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Per-person access to Regulatory & Advisory Matters (prepared, not applied yet)
-**Branch:** `dev` · **PR:** none yet · **Status:** Open, **SQL not yet applied**
+**Branch:** `dev` · **PR:** #11 · **Status:** Open, **SQL not yet applied**
 
 **What and why:** You asked to give Taiwo (Research Analyst) access to Regulatory & Advisory Matters. You chose "view and work on tasks", for Taiwo only. Today only System Admins, the CEO and the Legal Team can see the work board.
 
@@ -80,7 +80,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Profile & Settings: picture hint removed
-**Branch:** `dev` · **PR:** none yet · **Status:** Open
+**Branch:** `dev` · **PR:** #11 · **Status:** Open
 
 **What and why:** You asked to remove "JPG, PNG or WebP. Your picture is cropped to a square and shown to signed-in staff only." from Profile & Settings. The upload control there now shows only the picture and its buttons. The Admin Panel, which uses the same control, still shows the hint.
 
@@ -93,7 +93,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Sidebar showed the previous person after switching accounts
-**Branch:** `dev` · **PR:** #10 · **Status:** Open
+**Branch:** `dev` · **PR:** #10 · **Status:** Merged
 
 **What and why:** You signed in as Phillip, but the bottom of the sidebar still showed Duwem and his role. The sidebar is part of the page frame and stays loaded when you sign out and sign in again without a full page reload, but it only loaded the signed-in person once, when the app first opened. Two related problems in the same code:
 - after signing out, the **Sign out** button stayed on "Signing out…" (disabled) for the next person;
@@ -119,7 +119,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Login page wording
-**Branch:** `dev` · **PR:** #10 · **Status:** Open
+**Branch:** `dev` · **PR:** #10 · **Status:** Merged
 
 **What and why:** You asked to drop "work" from the login line. It now reads "Use your Excredite email (@excredite.ng)."
 

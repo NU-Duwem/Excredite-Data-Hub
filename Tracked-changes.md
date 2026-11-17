@@ -16,8 +16,47 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Sidebar showed the previous person after switching accounts
+**Branch:** `dev` · **PR:** #10 · **Status:** Open
+
+**What and why:** You signed in as Phillip, but the bottom of the sidebar still showed Duwem and his role. The sidebar is part of the page frame and stays loaded when you sign out and sign in again without a full page reload, but it only loaded the signed-in person once, when the app first opened. Two related problems in the same code:
+- after signing out, the **Sign out** button stayed on "Signing out…" (disabled) for the next person;
+- each change to an alert opened another live connection for the alert count, so they piled up.
+
+**Changes (`frontend/app/components/Sidebar.tsx`):**
+- **Reloading the person:** the name, role, picture and Admin Panel link now reload whenever someone arrives in the app from the login screens, on Supabase sign-in, sign-out and account-change events (including from other tabs), and when a profile changes.
+- **On sign-out:** the details are cleared, and the **Sign out** button is reset, even if signing out fails partway. The button is also reset whenever someone arrives in the app, so it can never stay on "Signing out…". You reported it was still stuck while signed in as Phillip; your copy most likely didn't have the first part of this fix yet.
+- **Alert count:** one live connection while in the app, closed on sign-out.
+
+**Files:** `frontend/app/components/Sidebar.tsx`, `Tracked-changes.md`.
+
+**Manual steps:** none. Pull and restart `npm run dev`.
+
+**Testing:**
+- **Browser test** against a fake Supabase server with two people: sign in as Duwem, sign out, then sign in as Phillip without a page reload.
+  - **Old code:** the sidebar still showed "Duwem Nwapi, System Admin", reproducing the bug.
+  - **New code:** it shows "Phillip Ekpo" with his role, and the Admin Panel link follows his role.
+  - **Sign out button after switching:** it reads "Sign out" and can be clicked.
+- **Unit tests:** 228 pass, 1 skipped.
+- **Code checks:** TypeScript is clean, with no new lint problems.
+
+---
+
+## 2026-11-18 · Login page wording
+**Branch:** `dev` · **PR:** #10 · **Status:** Open
+
+**What and why:** You asked to drop "work" from the login line. It now reads "Use your Excredite email (@excredite.ng)."
+
+**Files:** `frontend/app/login/page.tsx`, `Tracked-changes.md`.
+
+**Manual steps:** none.
+
+**Testing:** text-only change, checked in the file.
+
+---
+
 ## 2026-11-18 · ⚠️ Development-only master password (remove before deployment)
-**Branch:** `dev` · **PR:** #9 · **Status:** Open
+**Branch:** `dev` · **PR:** #9 · **Status:** Merged
 
 > **⚠️ REMINDER: take this off before deployment.** See "Before deployment" in `README.md`. `npm run build` and `npm start` refuse to run while `DEV_MASTER_PASSWORD` is set.
 

@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { getRoleDisplayName } from '@/utils/roles';
 import { PROFILE_CHANGED_EVENT } from '@/utils/avatars';
@@ -87,6 +87,7 @@ export default function Sidebar() {
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [alertCount, setAlertCount] = useState(0);
+  const [signingOut, setSigningOut] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const supabase = createClient();
 
@@ -104,65 +105,96 @@ export default function Sidebar() {
     });
   };
   
-  useEffect(() => {
-    const getUserData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // The saved profile is the source of truth for name, role and picture.
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('role, full_name, avatar_path')
-          .eq('id', user.id)
-          .single();
+  // Who is signed in. The sidebar lives in the page frame and stays loaded across
+  // sign-out and sign-in, so it must reload whenever the signed-in person changes:
+  // on leaving the login screens, on Supabase sign-in/sign-out events, and when a
+  // name or picture changes in Profile & Settings or the Admin Panel.
+  const onAuthRoute = AUTH_ROUTES.includes(pathname);
 
-        const fullName = (profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User').trim();
-        setUserName(fullName);
-        setUserAvatar(profile?.avatar_path ?? null);
-        setUserRole(profile?.role || 'power_team');
-      }
-    };
+  const clearUser = useCallback(() => {
+    setSigningOut(false);
+    setUserName('User');
+    setUserAvatar(null);
+    setUserRole(null);
+    setAlertCount(0);
+  }, []);
 
-    const getAlertCount = async () => {
-      const { count } = await supabase
-        .from('anomaly_alerts')
-        .select('*', { count: 'exact', head: true })
-        .in('status', ['UNREVIEWED', 'ASSIGNED']);
-      
-      setAlertCount(count || 0);
+  const loadUser = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return clearUser();
+    // The saved profile is the source of truth for name, role and picture.
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('role, full_name, avatar_path')
+      .eq('id', user.id)
+      .single();
+    const fullName = (profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User').trim();
+    setSigningOut(false);
+    setUserName(fullName);
+    setUserAvatar(profile?.avatar_path ?? null);
+    setUserRole(profile?.role || 'power_team');
+  }, [supabase, clearUser]);
 
-      // Realtime subscription
-      const channel = supabase
-        .channel('schema-db-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'anomaly_alerts'
-          },
-          () => {
-            getAlertCount();
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    };
-
-    getUserData();
-    getAlertCount();
-    // Name or picture changed in Profile & Settings or the Admin Panel
-    window.addEventListener(PROFILE_CHANGED_EVENT, getUserData);
-    return () => window.removeEventListener(PROFILE_CHANGED_EVENT, getUserData);
+  const loadAlertCount = useCallback(async () => {
+    const { count } = await supabase
+      .from('anomaly_alerts')
+      .select('*', { count: 'exact', head: true })
+      .in('status', ['UNREVIEWED', 'ASSIGNED']);
+    setAlertCount(count || 0);
   }, [supabase]);
 
-  const [signingOut, setSigningOut] = useState(false);
+  // Reload whenever we arrive in the app (first load, or straight after signing in).
+  useEffect(() => {
+    if (onAuthRoute) return;
+    let active = true;
+    (async () => {
+      await Promise.resolve();
+      if (!active) return;
+      await Promise.all([loadUser(), loadAlertCount()]);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [onAuthRoute, loadUser, loadAlertCount]);
+
+  // Sign-in, sign-out and account changes in this browser (including other tabs).
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') clearUser();
+      else if (event === 'SIGNED_IN' || event === 'USER_UPDATED') loadUser();
+    });
+    window.addEventListener(PROFILE_CHANGED_EVENT, loadUser);
+    return () => {
+      sub.subscription.unsubscribe();
+      window.removeEventListener(PROFILE_CHANGED_EVENT, loadUser);
+    };
+  }, [supabase, loadUser, clearUser]);
+
+  // Live alert count: one subscription while in the app.
+  useEffect(() => {
+    if (onAuthRoute) return;
+    const channel = supabase
+      .channel('sidebar-alert-count')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'anomaly_alerts' }, () => loadAlertCount())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, onAuthRoute, loadAlertCount]);
+
   const [menuOpen, setMenuOpen] = useState(false);
   const handleLogout = async () => {
     setSigningOut(true);
-    await supabase.auth.signOut();
+    setMenuOpen(false);
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error('Sign out failed:', (e as Error).message);
+    } finally {
+      // Always reset, so the next person never sees a stuck "Signing out…".
+      clearUser();
+      setSigningOut(false);
+    }
     router.push('/login?signed_out=1');
     router.refresh();
   };
@@ -175,7 +207,7 @@ export default function Sidebar() {
     </svg>
   );
 
-  if (AUTH_ROUTES.includes(pathname)) {
+  if (onAuthRoute) {
     return null;
   }
 

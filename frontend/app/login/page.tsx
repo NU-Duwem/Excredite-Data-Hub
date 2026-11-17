@@ -37,7 +37,7 @@ function LoginForm() {
     });
     // On success the browser leaves for Microsoft; we only get here on failure.
     if (error) {
-      setError('Microsoft sign-in is not available right now. Use your email and password.');
+      setError('Sign-in with email is not available right now. Please try again shortly.');
       setMsLoading(false);
     }
   };
@@ -79,6 +79,13 @@ function LoginForm() {
     }
   };
 
+  const errorPanel = shownError ? (
+    <div role="alert" className="rounded-md bg-red-50 p-4 border border-red-100">
+      <h3 className="text-sm font-medium text-red-800">Could not sign you in</h3>
+      <p className="mt-2 text-sm text-red-700">{shownError}</p>
+    </div>
+  ) : null;
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 w-full">
       <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-lg border border-gray-100">
@@ -94,30 +101,26 @@ function LoginForm() {
         </div>
         
         {MICROSOFT_SIGN_IN_ENABLED && (
-          <div className="mt-8 space-y-6">
+          <div className="mt-8 space-y-4">
             <button
               type="button"
               onClick={handleMicrosoft}
-              disabled={msLoading || isLoading}
-              className="w-full min-h-11 flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand disabled:opacity-50 shadow-sm"
+              disabled={msLoading}
+              className="w-full min-h-12 flex items-center justify-center gap-3 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand disabled:opacity-50 shadow-sm"
             >
-              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 21 21">
-                <rect x="1" y="1" width="9" height="9" fill="#f25022" />
-                <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
-                <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
-                <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="m3 7 9 6 9-6" />
               </svg>
-              {msLoading ? 'Opening Microsoft…' : 'Sign in with Microsoft'}
+              {msLoading ? 'Opening sign-in…' : 'Sign in with email'}
             </button>
-            <div className="flex items-center gap-3 text-xs font-semibold text-gray-500" aria-hidden="true">
-              <span className="h-px flex-1 bg-gray-200" />
-              or use your email and password
-              <span className="h-px flex-1 bg-gray-200" />
-            </div>
+            <p className="text-center text-xs text-gray-600">Use your Excredite work email (@excredite.ng).</p>
+            {errorPanel}
           </div>
         )}
 
-        <form className={`${MICROSOFT_SIGN_IN_ENABLED ? 'mt-6' : 'mt-8'} space-y-6`} onSubmit={handleLogin}>
+        {!MICROSOFT_SIGN_IN_ENABLED && (
+        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
           <div className="rounded-md shadow-sm space-y-4">
             <div>
               <label htmlFor="email-address" className="block text-sm font-medium text-gray-700 mb-1">
@@ -171,27 +174,13 @@ function LoginForm() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs font-semibold px-1">
+          <div className="flex items-center text-xs font-semibold px-1">
             <Link href="/forgot-password" className="text-brand hover:underline font-bold">
               Forgot password?
             </Link>
-            <Link href="/signup" className="text-brand hover:underline font-bold">
-              Create account
-            </Link>
           </div>
 
-          {shownError && (
-            <div role="alert" className="rounded-md bg-red-50 p-4 border border-red-100">
-              <div className="flex">
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">Could not sign you in</h3>
-                  <div className="mt-2 text-sm text-red-700">
-                    <p>{shownError}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {errorPanel}
 
           <div>
             <button
@@ -213,6 +202,7 @@ function LoginForm() {
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

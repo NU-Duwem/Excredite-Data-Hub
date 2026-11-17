@@ -1,15 +1,15 @@
-# Microsoft 365 sign-in and company email for EPDH
+# "Sign in with email" (Microsoft 365) and company email for EPDH
 
 **For:** Excredite's Microsoft 365 administrator and an EPDH admin.
 **Time:** about 20 minutes.
 
 **What this sets up:**
-- **Sign in with Microsoft:** staff sign in to EPDH with their Excredite Microsoft account and its usual multi-factor authentication. There's no separate EPDH password. When IT disables someone's Microsoft account, they lose access to EPDH as well.
+- **Sign in with email:** the EPDH login page has one button, **Sign in with email**. Behind the scenes it signs people in with their Excredite Microsoft 365 account and its usual multi-factor authentication, but the page never mentions Microsoft. There's no separate EPDH password. When IT disables someone's Microsoft account, they lose access to EPDH as well.
 - **Company sender address:** password-reset and invitation emails come from an `@excredite.ng` address instead of Supabase's test mailer.
 
 **Already done in EPDH:**
-- **Company accounts only:** the database refuses any account that isn't `@excredite.ng`. This applies to Microsoft sign-in, email sign-up and admin-created users.
-- **Linking to existing accounts:** a person's first Microsoft sign-in attaches to their existing EPDH account through their email address. Their role, documents and history stay as they are.
+- **Listed accounts only:** an account can exist only for an address on the EPDH list (`public.allowed_accounts`). Today the list holds the five addresses below, and nothing else gets in: no other `@excredite.ng` address and no outside address. Adding someone in the Admin Panel puts them on the list. There's no self sign-up.
+- **Linking to existing accounts:** a person's first sign-in attaches to their existing EPDH account through their email address. Their role, documents and history stay as they are.
 - **Sign-in method:** Profile & Settings shows how each person signs in.
 
 **Accounts:**
@@ -69,17 +69,19 @@ Each person's Microsoft 365 address must be exactly the same as their EPDH email
 2. **Set the addresses.** Go to **Authentication → URL Configuration**:
    - **Site URL:** the app's address once it's deployed (`http://localhost:3000` until then);
    - **Redirect URLs:** add `http://localhost:3000/auth/callback`, and also `https://<app domain>/auth/callback` once deployed.
-3. **Close self sign-up.** Go to **Authentication → Sign In / Providers** and turn off **Allow new users to sign up**. Then only people an EPDH admin has added can get in, with Microsoft or with a password. Someone who isn't set up yet sees "Your account has not been set up in EPDH yet".
+3. **Close self sign-up.** Go to **Authentication → Sign In / Providers** and turn off **Allow new users to sign up**. Then only people an EPDH admin has added can get in. Anyone else sees "This email address does not have access to EPDH". (The database's allowed list already enforces this; this setting is a second lock.)
 4. **Show the button.** Add this line to `frontend/.env.local` (and to the hosting settings once deployed), then restart the app:
 
    ```env
    NEXT_PUBLIC_MICROSOFT_SIGN_IN=true
    ```
 
-   The **Sign in with Microsoft** button then appears on the login page.
-5. **Test it.** Sign in with Microsoft as one person. Then open **Profile & Settings**: **Sign-in method** should read "Microsoft account or Email and password", and the role and history should be unchanged.
+   The login page then shows only the **Sign in with email** button; the password form disappears.
+5. **Test it.** Click **Sign in with email** as one person and sign in on the Microsoft screen that follows. Then open **Profile & Settings**: **Sign-in method** should read "Excredite work email or Email and password", and the role and history should be unchanged.
 
-**Adding someone new later:** an EPDH admin creates them in the **Admin Panel** with their exact Microsoft 365 address. They can then use **Sign in with Microsoft** straight away.
+6. **Retire passwords:** once all five people have signed in successfully with the button, go to **Authentication → Sign In / Providers → Email** and turn off email-and-password sign-in. After that, the work-email button is the only way in. (The login page already hides the password form whenever `NEXT_PUBLIC_MICROSOFT_SIGN_IN=true`.)
+
+**Adding someone new later:** an EPDH admin creates them in the **Admin Panel** with their exact Microsoft 365 address. That puts the address on the allowed list, and they can then use **Sign in with email** straight away.
 
 ---
 
@@ -109,4 +111,4 @@ Supabase sends password-reset, invitation and confirmation emails. Its built-in 
 
 Once Part 3 is done, EPDH's developer can restyle the email templates (reset, invite, confirm) in Excredite's branding.
 
-People who use **Sign in with Microsoft** rarely need these emails. They still matter for anyone using a password and for admin invitations.
+People who use **Sign in with email** rarely need these emails. They still matter for anyone using a password and for admin invitations.

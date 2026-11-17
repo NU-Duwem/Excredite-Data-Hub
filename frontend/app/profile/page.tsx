@@ -45,7 +45,7 @@ function StatusLine({ status }: { status: Status }) {
 function signInMethods(user: User | null) {
   const providers = new Set((user?.identities ?? []).map((i) => i.provider));
   const parts = [];
-  if (providers.has('azure')) parts.push('Microsoft account');
+  if (providers.has('azure')) parts.push('Excredite work email');
   if (providers.has('email') || providers.size === 0) parts.push('Email and password');
   return parts.join(' or ');
 }

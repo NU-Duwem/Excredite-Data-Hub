@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { friendlyAuthError, safeNextPath } from '@/utils/authRedirect';
 
 /**
- * Microsoft (and any other OAuth) sign-in returns here with a one-time code.
+ * "Sign in with email" (Excredite's Microsoft 365) returns here with a one-time code.
  * We swap it for a session cookie, then send the person on to the app.
  */
 export async function GET(request: Request) {
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
   await supabase.from('user_activity_log').insert({
     user_id: data.session.user.id,
     action: 'LOGIN',
-    details: 'Signed in with Microsoft.',
+    details: 'Signed in with work email (Microsoft 365).',
   });
 
   return NextResponse.redirect(new URL(next, url.origin));

@@ -16,6 +16,64 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Team photos; "Sign in with email"; only listed staff can sign in
+**Branch:** `dev` · **PR:** #7 · **Status:** Open
+
+**What and why:** You sent the team photos, asked for the sign-in button to read "Sign in with email", and asked that only the five Microsoft 365 addresses you gave can get in, with no other email or kind of email.
+
+**Changes:**
+- **Team photos** (already live):
+  - **Cropped and framed:**
+    - Taiwo's and Eyo's were screenshots with a dark frame, so they were cropped inside the round photo;
+    - Eyo is framed tighter on head and shoulders;
+    - Osefan's wide shot is centred on her face;
+    - Phillip's is a square crop.
+  - **Saved** as 512×512 WebP in the private `avatars` bucket, and linked to each profile.
+  - **How they were uploaded:** I don't hold the server's secret key, so I opened a one-off upload permission limited to exactly those four file paths, uploaded, and removed it straight away. Afterwards I confirmed that outsiders can neither upload nor download pictures.
+  - **Duwem:** no photo was in the zip, so he shows initials until one is added.
+- **Only listed staff** (`18_allowed_accounts.sql`, already applied):
+  - **The list:** a new server-only `public.allowed_accounts` table holding the five addresses. It accepts only `@excredite.ng` addresses, and signed-in users and the public API can't read or change it.
+  - **The rule:** the account trigger now also requires the address to be on the list. No other `@excredite.ng` address and no outside address can get an account by any route.
+  - **Admin Panel:** **Add user** puts the address on the list first, and refuses anything that isn't `@excredite.ng`.
+- **"Sign in with email":**
+  - **On the button:** an envelope icon and the label "Sign in with email", with "Use your Excredite work email (@excredite.ng)" underneath. No Microsoft branding is shown.
+  - **Behind it:** Excredite's Microsoft 365 sign-in, as before.
+  - **When it's switched on** (`NEXT_PUBLIC_MICROSOFT_SIGN_IN=true`), the button is the only thing on the login page; the password form is hidden.
+  - **Until then**, the password form stays so nobody is locked out.
+- **Other changes:**
+  - Error messages no longer mention Microsoft.
+  - "Create account" is removed, and `/signup` redirects to the login page.
+  - Profile & Settings shows the sign-in method as "Excredite work email".
+- **Setup guide:** reworded throughout, with a new step to turn off password sign-in in Supabase once everyone has used the button. README updated.
+
+**Files:**
+- **Database:** `18_allowed_accounts.sql`.
+- **Pages:** `frontend/app/login/page.tsx`, `frontend/app/signup/page.tsx`, `frontend/app/profile/page.tsx`.
+- **Server:** `frontend/app/auth/callback/route.ts`, `frontend/app/api/admin/users/route.ts`.
+- **Helpers and tests:** `frontend/utils/authRedirect.ts`, `frontend/utils/__tests__/authRedirect.test.ts`.
+- **Docs:** `docs/technical/microsoft-365-sign-in.md`, `README.md`, `Tracked-changes.md`.
+
+**Manual steps:**
+1. The SQL and photos are already live.
+2. Follow `docs/technical/microsoft-365-sign-in.md`, Parts 1 and 2. When everyone has signed in with the button, do step 6 there: turn off email-and-password sign-in.
+3. Optional: add Duwem's photo in Profile & Settings.
+
+**Testing:**
+- **Unit tests:** 223 pass, 1 skipped. New tests cover the company-email check, and check that error messages don't mention Microsoft.
+- **Code checks:** TypeScript is clean, with no new lint problems.
+- **Build:** `next build --webpack` succeeds.
+- **Pages:** `/signup` returns a redirect to `/login`. A screenshot of the login page confirmed the single "Sign in with email" button and the error panel.
+- **Live database checks, rolled back afterwards:**
+  - listed addresses work;
+  - an unlisted `@excredite.ng` address and an outside address are refused;
+  - the list rejects non-company addresses;
+  - signed-in users can't read the list;
+  - adding an address to the list lets that account be created.
+- **Photos:** all four profiles point to files that exist. Anonymous download and upload are refused, and the temporary upload permission is gone.
+- **Security advisor:** it noted that the new table had no access rule, so I added an explicit "no access through the API" rule. Only the existing leaked-password warning remains.
+
+---
+
 ## 2026-11-18 · Profile pictures; Sign in with Microsoft; company accounts only; Phillip Ekpo
 **Branch:** `dev` · **PR:** #7 · **Status:** Open
 

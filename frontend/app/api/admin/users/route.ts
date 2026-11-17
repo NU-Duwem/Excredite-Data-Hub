@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/utils/supabase/server';
 import { PRIMARY_ROLES } from '@/utils/roles';
 import { AVATAR_BUCKET, isOwnAvatarPath } from '@/utils/avatars';
+import { isCompanyEmail } from '@/utils/authRedirect';
 
 const VALID_ROLES: readonly string[] = PRIMARY_ROLES;
 
@@ -60,8 +61,21 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: `Invalid role: ${newRole}` }, { status: 400 });
         }
 
+        // Only listed @excredite.ng addresses can hold an account
+        // (18_allowed_accounts.sql). Adding someone puts them on the list.
+        const cleanEmail = String(email).trim().toLowerCase();
+        if (!isCompanyEmail(cleanEmail)) {
+          return NextResponse.json({ error: 'Only @excredite.ng email addresses can be added.' }, { status: 400 });
+        }
+        const { error: listError } = await adminClient
+          .from('allowed_accounts')
+          .upsert({ email: cleanEmail, note: fullName || null }, { onConflict: 'email', ignoreDuplicates: true });
+        if (listError) {
+          return NextResponse.json({ error: `Could not allow this address: ${listError.message}` }, { status: 500 });
+        }
+
         const { data: created, error } = await adminClient.auth.admin.createUser({
-          email,
+          email: cleanEmail,
           password,
           email_confirm: true, // admin-created accounts are trusted
           user_metadata: { full_name: fullName || '' },

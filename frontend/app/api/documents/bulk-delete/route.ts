@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/utils/supabase/server';
+import { canManageDocument, getRole } from '@/utils/documentAccess';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -38,11 +39,21 @@ export async function POST(req: Request) {
     // 1. Fetch metadata (s3_keys & titles) for selected document IDs
     const { data: docs, error: fetchError } = await adminClient
       .from('documents')
-      .select('id, title, s3_key')
+      .select('id, title, s3_key, uploaded_by')
       .in('id', documentIds);
 
     if (fetchError || !docs || docs.length === 0) {
       return NextResponse.json({ error: 'No matching documents found to delete' }, { status: 404 });
+    }
+
+    // Only admins, or the person who uploaded each document, may delete. All or nothing.
+    const role = await getRole(adminClient, userId);
+    const notAllowed = docs.filter((d) => !canManageDocument(role, user.email, d));
+    if (notAllowed.length > 0) {
+      return NextResponse.json(
+        { error: `You can't delete ${notAllowed.length} of the selected documents: only an admin or the person who uploaded a document can delete it. Nothing was deleted.` },
+        { status: 403 },
+      );
     }
 
     // 2. Collect storage keys to remove

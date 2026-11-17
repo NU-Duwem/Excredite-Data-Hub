@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/utils/supabase/server';
+import { findVisibleDocument } from '@/utils/documentAccess';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -22,6 +24,11 @@ export async function POST(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
+    // Only documents this user may see (restricted ones stay hidden).
+    if (!(await findVisibleDocument(supabase as unknown as SupabaseClient, documentId))) {
+      return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);

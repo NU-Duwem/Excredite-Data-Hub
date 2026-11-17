@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { createClient as createServerClient } from '@/utils/supabase/server';
+import { findVisibleDocument, getSession } from '@/utils/documentAccess';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -16,6 +16,15 @@ export async function GET(
       return NextResponse.json({ error: 'Missing documentId parameter' }, { status: 400 });
     }
 
+    // Signed-in users only, and only documents they may see (restricted ones stay hidden).
+    const { db, user } = await getSession();
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+    if (!(await findVisibleDocument(db, documentId))) {
+      return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+    }
+
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
     // 1. Fetch document metadata
@@ -27,16 +36,6 @@ export async function GET(
 
     if (fetchError || !doc) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
-    }
-
-    // Ensure storage bucket exists
-    try {
-      const { data: bData, error: bErr } = await adminClient.storage.getBucket('documents');
-      if (bErr || !bData) {
-        await adminClient.storage.createBucket('documents', { public: true, fileSizeLimit: 52428800 });
-      }
-    } catch (e) {
-      // Ignore if bucket already exists
     }
 
     // 2. Resolve download mode (inline preview vs attachment download)

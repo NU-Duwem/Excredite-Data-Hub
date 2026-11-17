@@ -46,7 +46,8 @@ To set up the database schema and RLS policies, execute the SQL files in your Su
 9. `12_matter_tasks.sql` - Tasks on Regulatory & Advisory jobs (the work board): the `matter_tasks` table, a job lead linked to a real user, `list_matter_people()` for assignee names, and edit rights on jobs and tasks for the legal team.
 10. `13_alerts.sql` - Turns Anomaly Alerts into Alerts: categories (legal & compliance, urgent developments, document contradictions, grid & data, system), severity, evidence, hand-filed reports by any signed-in user, triage by the legal team, analysts, the CEO and admins, and automatic alerts for failing news feeds.
 11. `14_news_sources_sections.sql` - Points five Nigerian outlets at their electricity or energy feeds instead of their front pages, and adds Premium Times' NERC feed. Far more power stories get through.
-12. In the dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**. This is not available in SQL, and needs a paid Supabase plan.
+12. `15_document_access_and_search.sql` - Every signed-in user can read every document unless an admin marks it **Restricted** (then only admins and people they grant access). Switches document search to free, local `gte-small` embeddings (384 dimensions) with a meaning + keyword search function. Afterwards, open each existing document and click **Re-process** so it is embedded with the new model.
+13. In the dashboard, turn on **Authentication → Sign In / Providers → Email → Prevent use of leaked passwords**. This is not available in SQL, and needs a paid Supabase plan.
 
 ### 2. Frontend Setup
 Navigate to the frontend directory:
@@ -66,7 +67,9 @@ Create a `.env.local` file in the `frontend` directory with your Supabase creden
 NEXT_PUBLIC_SUPABASE_URL=https://<your-project-id>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_publishable_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key     # server-side API routes only
-GEMINI_API_KEY=your_gemini_key                      # and/or ANTHROPIC_API_KEY
+GEMINI_API_KEY=your_gemini_key                      # and/or ANTHROPIC_API_KEY (answers questions; Claude defaults to claude-opus-5-5)
+# Document search embeddings need no key: the free gte-small model (~34 MB) downloads
+# from Hugging Face on first use. Optional: EMBEDDINGS_CACHE_DIR=/path/to/cache
 CRON_SECRET=a_long_random_string                    # protects /api/news/ingest
 ```
 

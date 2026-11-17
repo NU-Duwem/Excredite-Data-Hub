@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/utils/supabase/server';
+import { canManageDocument, getRole } from '@/utils/documentAccess';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -41,12 +42,17 @@ export async function DELETE(
     // 1. Fetch document metadata
     const { data: doc, error: fetchError } = await adminClient
       .from('documents')
-      .select('id, title, s3_key')
+      .select('id, title, s3_key, uploaded_by')
       .eq('id', documentId)
       .single();
 
     if (fetchError || !doc) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+    }
+
+    // Only admins, or the person who uploaded it, may delete a document.
+    if (!canManageDocument(await getRole(adminClient, userId), user.email, doc)) {
+      return NextResponse.json({ error: 'Only an admin or the person who uploaded this document can delete it.' }, { status: 403 });
     }
 
     // 2. Remove file from Supabase Storage if s3_key exists

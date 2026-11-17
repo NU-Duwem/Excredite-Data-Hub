@@ -3,6 +3,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import AccessDialog from './AccessDialog';
 
 interface Document {
   id: string;
@@ -16,6 +18,8 @@ interface Document {
   notes: string | null;
   source?: 'upload' | 'ai_generated';
   linked_matter_id?: string | null;
+  restricted?: boolean;
+  uploaded_by?: string | null;
 }
 
 interface Matter {
@@ -128,6 +132,11 @@ function DocumentsContent() {
   const [filterClass, setFilterClass] = useState('All');
   const [searchText, setSearchText] = useState('');
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [showAccess, setShowAccess] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
+  const [docNotice, setDocNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   // Sync tab with URL search params if present
   useEffect(() => {
@@ -329,7 +338,11 @@ function DocumentsContent() {
     const fetchUserRole = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        setUserRole(user.user_metadata?.role || 'power_team');
+        // Roles live in user_profiles (set by admins), not in user-editable metadata.
+        const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', user.id).maybeSingle();
+        setUserRole(profile?.role ?? null);
+        setUserId(user.id);
+        setUserEmail(user.email ?? null);
       }
     };
     fetchUserRole();
@@ -358,7 +371,41 @@ function DocumentsContent() {
     return () => clearInterval(interval);
   }, [documents, selectedDoc, supabase]);
 
-  const isAdmin = userRole === 'power_admin' || userRole === 'admin';
+  const isAdmin = userRole === 'power_admin';
+  // Overwrite, delete and re-process: admins, or whoever uploaded the document (mirrors the API).
+  const canManage = (doc: Document) =>
+    isAdmin || (!!userEmail && !!doc.uploaded_by && doc.uploaded_by.toLowerCase() === userEmail.toLowerCase());
+
+  const refreshDoc = async (docId: string) => {
+    const { data } = await supabase.from('documents').select('*').eq('id', docId).maybeSingle();
+    if (data) {
+      setDocuments(prev => prev.map(d => (d.id === docId ? data : d)));
+      setSelectedDoc(prev => (prev && prev.id === docId ? data : prev));
+    }
+  };
+
+  const reprocessSelected = async () => {
+    if (!selectedDoc) return;
+    setReprocessing(true);
+    setDocNotice(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/documents/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ documentId: selectedDoc.id }),
+      });
+      const json = await res.json().catch(() => ({}));
+      setDocNotice(res.ok
+        ? { kind: 'ok', text: 'Re-processed: the text was extracted again and is now searchable by the AI.' }
+        : { kind: 'error', text: json.error || 'Re-processing failed.' });
+    } catch (err) {
+      setDocNotice({ kind: 'error', text: err instanceof Error ? err.message : 'Re-processing failed.' });
+    } finally {
+      setReprocessing(false);
+      await refreshDoc(selectedDoc.id);
+    }
+  };
 
   // Helper to trigger manual or background processing of a pending document
   const handleProcessDoc = async (docId: string) => {
@@ -369,10 +416,7 @@ function DocumentsContent() {
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ documentId: docId }),
       });
-      const resJson = await res.json();
-      if (res.ok && resJson.document) {
-        setDocuments(prev => prev.map(d => d.id === docId ? { ...d, ...resJson.document } : d));
-      }
+      if (res.ok || res.status === 422) await refreshDoc(docId);
     } catch (err) {
       console.warn('Process document background check:', err);
     }
@@ -432,13 +476,7 @@ function DocumentsContent() {
     }
   }, [selectedFile]);
 
-  // Mock documents fallback
-  const allDocs: Document[] = documents.length > 0 ? documents : [
-    { id: '1', title: 'NERC Multi-Year Tariff Order 2024', created_at: '2024-12-15', classification: 'PUBLIC', document_type: 'TARIFF_DETERMINATION', file_size_bytes: 2500000, processing_status: 'COMPLETE', s3_key: null, notes: null },
-    { id: '2', title: 'TCN Q1 Grid Disturbance Report', created_at: '2025-04-02', classification: 'INTERNAL', document_type: 'MARKET_REPORT', file_size_bytes: 5300000, processing_status: 'PROCESSING', s3_key: null, notes: null },
-    { id: '3', title: 'Notice of Appeal - DISCO Tariff Dispute', created_at: '2025-05-10', classification: 'LEGAL_PRIVILEGED', document_type: 'COURT_JUDGMENT', file_size_bytes: 1200000, processing_status: 'COMPLETE', s3_key: null, notes: null },
-    { id: '4', title: 'Draft Policy on Renewable Integration', created_at: '2025-05-14', classification: 'INTERNAL', document_type: 'POLICY_PAPER', file_size_bytes: 800000, processing_status: 'PENDING', s3_key: null, notes: null },
-  ];
+  const allDocs: Document[] = documents;
 
   const filteredDocs = allDocs.filter(doc => {
     const matchesClass = filterClass === 'All' || doc.classification === filterClass;
@@ -1266,6 +1304,9 @@ function DocumentsContent() {
                                 {doc.classification === 'LEGAL_PRIVILEGED' ? 'Legal privileged' : doc.classification === 'PUBLIC' ? 'Public' : 'Internal'}
                               </span>
                             )}
+                            {doc.restricted && (
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-900 text-white">Restricted</span>
+                            )}
                             {!ready && (
                               <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
                                 doc.processing_status === 'FAILED' ? 'bg-red-50 text-red-800' : 'bg-accent-soft text-accent-ink'
@@ -1276,7 +1317,7 @@ function DocumentsContent() {
                             <span className="text-[11px] text-gray-600">{new Date(doc.created_at).toLocaleDateString('en-GB')}</span>
                           </div>
                         </div>
-                        <button
+                        {canManage(doc) && <button
                           type="button"
                           onClick={(e) => openDeleteModal(e, doc)}
                           aria-label={`Delete ${doc.title}`}
@@ -1286,7 +1327,7 @@ function DocumentsContent() {
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
-                        </button>
+                        </button>}
                       </li>
                       );
                     })
@@ -1300,7 +1341,10 @@ function DocumentsContent() {
                 <>
                   <div className="px-6 py-5 border-b border-gray-100 flex flex-wrap justify-between items-start gap-3">
                     <div className="min-w-0">
-                      <h2 className="text-lg font-extrabold text-gray-900 leading-snug break-words">{selectedDoc.title}</h2>
+                      <h2 className="text-lg font-extrabold text-gray-900 leading-snug break-words">
+                        {selectedDoc.title}
+                        {selectedDoc.restricted && <span className="ml-2 align-middle px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-900 text-white">Restricted</span>}
+                      </h2>
                       <p className="text-sm text-gray-600 mt-0.5">
                         {selectedDoc.document_type.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}
                         {' · '}{formatFileSize(selectedDoc.file_size_bytes)}
@@ -1308,6 +1352,25 @@ function DocumentsContent() {
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAccess(true)}
+                          className="min-h-10 px-3.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-brand hover:bg-gray-50"
+                        >
+                          Access
+                        </button>
+                      )}
+                      {canManage(selectedDoc) && (
+                        <button
+                          type="button"
+                          onClick={() => void reprocessSelected()}
+                          disabled={reprocessing}
+                          className="min-h-10 px-3.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-brand hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          {reprocessing ? 'Re-processing…' : 'Re-process'}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => { setShareDocTitle(selectedDoc.title); setShareDocId(selectedDoc.id); setShowShareModal(true); }}
@@ -1336,6 +1399,11 @@ function DocumentsContent() {
                   </div>
                   
                   <div className="flex-1 p-6 overflow-y-auto space-y-6">
+                    {docNotice && (
+                      <p role={docNotice.kind === 'error' ? 'alert' : 'status'} className={`rounded-xl px-4 py-3 text-sm ${docNotice.kind === 'error' ? 'bg-red-50 text-red-800' : 'bg-brand/10 text-brand'}`}>
+                        {docNotice.text}
+                      </p>
+                    )}
                     {isEditing ? (
                       <div className="space-y-4">
                         <textarea
@@ -1929,6 +1997,21 @@ function DocumentsContent() {
               </div>
             </div>
           </div>
+        )}
+
+        {showAccess && selectedDoc && isAdmin && (
+          <AccessDialog
+            supabase={supabase as unknown as SupabaseClient}
+            doc={selectedDoc}
+            me={userId}
+            onClose={() => setShowAccess(false)}
+            onSaved={(restricted) => {
+              setShowAccess(false);
+              setDocuments(prev => prev.map(d => (d.id === selectedDoc.id ? { ...d, restricted } : d)));
+              setSelectedDoc(prev => (prev ? { ...prev, restricted } : prev));
+              setDocNotice({ kind: 'ok', text: restricted ? 'Restricted: only admins and the people you listed can open it.' : 'Everyone signed in can open this document.' });
+            }}
+          />
         )}
       </div>
     </main>

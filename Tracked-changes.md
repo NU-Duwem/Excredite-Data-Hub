@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Clear upload confirmation; project documents moved into `docs/`
-**Branch:** `dev` · **PR:** pending · **Status:** Open
+**Branch:** `dev` · **PR:** #6 · **Status:** Open
 
 **What and why:**
 1. **Upload confirmation.** After a successful upload the page used to show one small line of green text for 2 seconds, then cleared the form. That was easy to miss, and it said nothing about whether processing worked.

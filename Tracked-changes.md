@@ -25,7 +25,7 @@ This file records every change made to the project, newest first. It covers the 
 
 **Changes (`frontend/app/components/Sidebar.tsx`):**
 - **Reloading the person:** the name, role, picture and Admin Panel link now reload whenever someone arrives in the app from the login screens, on Supabase sign-in, sign-out and account-change events (including from other tabs), and when a profile changes.
-- **On sign-out:** the details are cleared, and the **Sign out** button is reset.
+- **On sign-out:** the details are cleared, and the **Sign out** button is reset, even if signing out fails partway. The button is also reset whenever someone arrives in the app, so it can never stay on "Signing out…". You reported it was still stuck while signed in as Phillip; your copy most likely didn't have the first part of this fix yet.
 - **Alert count:** one live connection while in the app, closed on sign-out.
 
 **Files:** `frontend/app/components/Sidebar.tsx`, `Tracked-changes.md`.
@@ -36,6 +36,7 @@ This file records every change made to the project, newest first. It covers the 
 - **Browser test** against a fake Supabase server with two people: sign in as Duwem, sign out, then sign in as Phillip without a page reload.
   - **Old code:** the sidebar still showed "Duwem Nwapi, System Admin", reproducing the bug.
   - **New code:** it shows "Phillip Ekpo" with his role, and the Admin Panel link follows his role.
+  - **Sign out button after switching:** it reads "Sign out" and can be clicked.
 - **Unit tests:** 228 pass, 1 skipped.
 - **Code checks:** TypeScript is clean, with no new lint problems.
 

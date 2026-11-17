@@ -87,6 +87,7 @@ export default function Sidebar() {
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [alertCount, setAlertCount] = useState(0);
+  const [signingOut, setSigningOut] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const supabase = createClient();
 
@@ -111,6 +112,7 @@ export default function Sidebar() {
   const onAuthRoute = AUTH_ROUTES.includes(pathname);
 
   const clearUser = useCallback(() => {
+    setSigningOut(false);
     setUserName('User');
     setUserAvatar(null);
     setUserRole(null);
@@ -127,6 +129,7 @@ export default function Sidebar() {
       .eq('id', user.id)
       .single();
     const fullName = (profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User').trim();
+    setSigningOut(false);
     setUserName(fullName);
     setUserAvatar(profile?.avatar_path ?? null);
     setUserRole(profile?.role || 'power_team');
@@ -179,14 +182,19 @@ export default function Sidebar() {
     };
   }, [supabase, onAuthRoute, loadAlertCount]);
 
-  const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const handleLogout = async () => {
     setSigningOut(true);
     setMenuOpen(false);
-    await supabase.auth.signOut();
-    clearUser();
-    setSigningOut(false);
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error('Sign out failed:', (e as Error).message);
+    } finally {
+      // Always reset, so the next person never sees a stuck "Signing out…".
+      clearUser();
+      setSigningOut(false);
+    }
     router.push('/login?signed_out=1');
     router.refresh();
   };

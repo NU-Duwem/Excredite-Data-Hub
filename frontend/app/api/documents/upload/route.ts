@@ -113,7 +113,7 @@ export async function POST(req: Request) {
       try {
         const { data: bucketData, error: bucketErr } = await adminClient.storage.getBucket('documents');
         if (bucketErr || !bucketData) {
-          await adminClient.storage.createBucket('documents', { public: true, fileSizeLimit: 52428800 });
+          await adminClient.storage.createBucket('documents', { public: false, fileSizeLimit: 52428800 });
         }
       } catch (bErr) {
         console.warn('Auto bucket check error:', bErr);

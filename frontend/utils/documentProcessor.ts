@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { embedTexts, toPgVector } from '@/utils/embeddings';
 
 // Dynamic requires to prevent Webpack/Turbopack runtime bundling errors
 let pdfParse: any;
@@ -48,35 +49,6 @@ function chunkText(text: string, chunkSize = 1200, overlap = 200) {
   }
 
   return chunks;
-}
-
-// Helper to generate embedding using Gemini Embedding API
-async function generateEmbedding(text: string): Promise<number[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return new Array(768).fill(0);
-  }
-
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'models/text-embedding-004',
-        content: { parts: [{ text }] },
-      }),
-    });
-
-    if (!res.ok) {
-      return new Array(768).fill(0);
-    }
-
-    const json = await res.json();
-    return json.embedding?.values || new Array(768).fill(0);
-  } catch (err) {
-    console.error('Embedding generation error:', err);
-    return new Array(768).fill(0);
-  }
 }
 
 export async function processDocumentById(documentId: string) {
@@ -242,64 +214,41 @@ export async function processDocumentById(documentId: string) {
     chunks.forEach(c => structuredChunks.push({ text: c, metadata: { format: 'TEXT' } }));
   }
 
-  // 4. Generate Embeddings & Save Chunks to Supabase DB
-  if (structuredChunks.length > 0) {
-    await adminClient.from('embeddings').delete().eq('document_id', documentId);
-
-    const embeddingRecords = [];
-    for (let i = 0; i < structuredChunks.length; i++) {
-      const item = structuredChunks[i];
-      const vector = await generateEmbedding(item.text);
-
-      embeddingRecords.push({
-        document_id: documentId,
-        chunk_index: i,
-        chunk_text: item.text,
-        embedding: vector,
-        metadata: item.metadata || {},
-      });
-    }
-
-    let { error: embedInsertError } = await adminClient
-      .from('embeddings')
-      .insert(embeddingRecords);
-
-    // Fallback: If 'embedding' vector column doesn't exist yet in Supabase schema, insert text chunks without vector
-    if (embedInsertError && embedInsertError.code === 'PGRST204') {
-      console.warn('Embedding vector column missing, inserting text chunks fallback...');
-      const fallbackRecords = embeddingRecords.map(({ embedding, ...rest }) => rest);
-      const { error: fbErr } = await adminClient.from('embeddings').insert(fallbackRecords);
-      if (fbErr) console.error('Fallback embeddings insert error:', fbErr);
-    } else if (embedInsertError) {
-      console.error('Error inserting embeddings:', embedInsertError);
-    }
+  // 4. Embed the chunks with the free local model and save them.
+  //    Any failure marks the document FAILED with a reason: never store placeholder vectors.
+  const fail = async (reason: string) => {
+    await adminClient.from('documents').update({ processing_status: 'FAILED', notes: reason.slice(0, 1000) }).eq('id', documentId);
+    throw new Error(reason);
+  };
+  const usable = structuredChunks.filter((c) => c.text && c.text.trim().length > 0);
+  if (usable.length === 0) {
+    await fail('No text could be extracted. The file may be scanned images; scanned pages will be handled by the bulk import tool (OCR).');
   }
 
-  // 5. Generate summary using Gemini if available
-  let docSummary = '';
-  const apiKey = process.env.GEMINI_API_KEY;
-  const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  if (apiKey && extractedText.length > 50) {
-    try {
-      const summaryRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `Summarize the following document in 2 concise sentences for a legal and power sector executive dashboard:\n\n${extractedText.slice(0, 4000)}`
-            }]
-          }]
-        })
-      });
-      if (summaryRes.ok) {
-        const sumJson = await summaryRes.json();
-        docSummary = sumJson.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      }
-    } catch (sumErr) {
-      console.error('Summary generation error:', sumErr);
-    }
+  let vectors: number[][] = [];
+  try {
+    vectors = await embedTexts(usable.map((c) => c.text));
+  } catch (err) {
+    await fail(`Could not create search embeddings: ${err instanceof Error ? err.message : String(err)}`);
   }
+
+  const { error: deleteOldError } = await adminClient.from('embeddings').delete().eq('document_id', documentId);
+  if (deleteOldError) await fail(`Could not replace old chunks: ${deleteOldError.message}`);
+
+  const records = usable.map((item, i) => ({
+    document_id: documentId,
+    chunk_index: i,
+    chunk_text: item.text,
+    embedding: toPgVector(vectors[i]),
+    metadata: { ...(item.metadata || {}), page_number: item.page_number, slide_number: item.slide_number, model: 'gte-small' },
+  }));
+  for (let i = 0; i < records.length; i += 200) {
+    const { error: insertError } = await adminClient.from('embeddings').insert(records.slice(i, i + 200));
+    if (insertError) await fail(`Could not save chunks: ${insertError.message}`);
+  }
+
+  // 5. Summaries used to be written by Gemini; document text is no longer sent there.
+  const docSummary = doc.summary || '';
 
   // 6. Update Document Status to COMPLETE
   let { data: updatedDoc, error: updateError } = await adminClient

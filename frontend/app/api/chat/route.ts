@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient as createSessionClient } from '@/utils/supabase/server';
+import { embedQuery, toPgVector } from '@/utils/embeddings';
 
 // Setup Supabase Client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -78,62 +80,82 @@ async function getGeneralTimeSeriesData(args: { table_name: string; start_date: 
   }
   return { data };
 }
-async function searchUploadedDocuments(args: { query: string; limit?: number }) {
+/**
+ * Searches document text as the signed-in user (so restricted documents stay
+ * hidden): meaning (free local gte-small embeddings) plus keywords, merged by
+ * public.match_document_chunks(). Falls back to keywords only if the
+ * embedding model can't load.
+ */
+async function searchUploadedDocuments(args: { query: string; limit?: number }, db: SupabaseClient) {
   try {
-    const limit = args.limit || 4;
-    const cleanQuery = (args.query || '').trim();
+    const limit = Math.min(Math.max(Number(args.limit) || 6, 1), 12);
+    const cleanQuery = (args.query || '').trim().slice(0, 500);
     if (!cleanQuery) return { status: 'empty', message: 'Query string empty.' };
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    let queryEmbedding: string | null = null;
+    try {
+      queryEmbedding = toPgVector(await embedQuery(cleanQuery));
+    } catch (err) {
+      console.warn('Document search: embedding unavailable, using keywords only:', err);
+    }
 
-    // 1. Token-efficient keyword RAG search against extracted text chunks
-    const { data: chunks, error: chunkErr } = await supabase
-      .from('embeddings')
-      .select('chunk_index, chunk_text, metadata, document_id, documents(id, title, document_type, classification)')
-      .ilike('chunk_text', `%${cleanQuery}%`)
-      .limit(limit);
+    const { data: chunks, error: chunkErr } = await db.rpc('match_document_chunks', {
+      query_embedding: queryEmbedding,
+      query_text: cleanQuery,
+      match_count: limit,
+    });
+    if (chunkErr) return { error: `Document search error: ${chunkErr.message}` };
 
-    if (!chunkErr && chunks && chunks.length > 0) {
+    if (chunks && chunks.length > 0) {
       return {
         status: 'success',
         found_count: chunks.length,
-        chunks: chunks.map(c => ({
-          document_title: (c.documents as any)?.title || 'Document Excerpt',
-          document_type: (c.documents as any)?.document_type,
-          slide_number: c.metadata?.slide_number || null,
-          sheet_name: c.metadata?.sheet_name || null,
-          excerpt: c.chunk_text.slice(0, 600), // Strict token cap (~100 words per chunk max!)
-        }))
+        chunks: (chunks as { title: string; document_type: string; metadata: Record<string, unknown> | null; chunk_text: string }[]).map((c) => ({
+          document_title: c.title || 'Document excerpt',
+          document_type: c.document_type,
+          page_number: c.metadata?.page_number ?? null,
+          slide_number: c.metadata?.slide_number ?? null,
+          sheet_name: c.metadata?.sheet_name ?? null,
+          excerpt: c.chunk_text.slice(0, 900),
+        })),
       };
     }
 
-    // 2. Fallback: Search document titles or notes metadata
-    const { data: docs } = await supabase
+    // Fallback: titles and notes (still as the user, so restrictions apply)
+    const safe = cleanQuery.replace(/[%_,()]/g, ' ');
+    const { data: docs } = await db
       .from('documents')
       .select('id, title, document_type, classification, summary, notes')
-      .or(`title.ilike.%${cleanQuery}%,notes.ilike.%${cleanQuery}%`)
+      .or(`title.ilike.%${safe}%,notes.ilike.%${safe}%`)
       .limit(limit);
 
     if (docs && docs.length > 0) {
       return {
         status: 'success',
         found_count: docs.length,
-        documents: docs.map(d => ({
+        documents: docs.map((d) => ({
           title: d.title,
           type: d.document_type,
-          summary: d.summary || d.notes || 'Document recorded in database repository.',
-        }))
+          summary: d.summary || d.notes || 'Document recorded in the library.',
+        })),
       };
     }
 
     return { status: 'empty', message: `No matching document chunks found for query "${cleanQuery}".` };
-  } catch (err: any) {
-    return { error: `Document search error: ${err.message}` };
+  } catch (err) {
+    return { error: `Document search error: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
 
 export async function POST(req: Request) {
   try {
+    // Signed-in users only; document search runs with their own permissions.
+    const sessionDb = await createSessionClient();
+    const { data: { user } } = await sessionDb.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Please sign in to use the AI.' }, { status: 401 });
+    }
+
     const { messages } = await req.json();
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Invalid messages format' }, { status: 400 });
@@ -229,6 +251,20 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
             },
             required: ["table_name", "start_date"]
           }
+        },
+        {
+          name: "search_uploaded_documents",
+          description: "Search the firm's document library (regulatory orders, court judgments, policy papers, reports, presentations, spreadsheets) by meaning and keywords. Returns the most relevant excerpts with their document titles. Use it whenever the question may be answered by the firm's documents.",
+          input_schema: {
+            type: "object",
+            properties: {
+              query: {
+                type: "string",
+                description: "What to look for, in plain words (e.g. 'Band A tariff review', 'gas supply shortfalls at thermal plants')."
+              }
+            },
+            required: ["query"]
+          }
         }
       ];
 
@@ -237,7 +273,7 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
         content: m.content
       }));
 
-      const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+      const model = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5';
       const anthropicUrl = 'https://api.anthropic.com/v1/messages';
 
       let loopCount = 0;
@@ -250,15 +286,17 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': anthropicKey,
-            'anthropic-version': '2023-06-01'
+            'anthropic-version': '2023-06-01',
+            // If the model declines on safety grounds, the API retries on a fallback model.
+            'anthropic-beta': 'server-side-fallback-2026-07-01'
           },
           body: JSON.stringify({
             model,
-            max_tokens: 2048,
+            max_tokens: 16000,
             system: systemInstruction,
             messages: currentMessages,
             tools: anthropicTools,
-            temperature: 0.1
+            fallbacks: 'default'
           })
         });
 
@@ -270,6 +308,10 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
 
         const resData = await response.json();
         const responseContent = resData.content; // array of blocks
+
+        if (resData.stop_reason === 'refusal') {
+          return NextResponse.json({ content: 'The AI declined to answer this request. Try rephrasing the question.' });
+        }
 
         // Append assistant response to history
         currentMessages.push({
@@ -289,6 +331,8 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
               result = await getGenerationData(block.input as any);
             } else if (block.name === 'get_general_time_series_data') {
               result = await getGeneralTimeSeriesData(block.input as any);
+            } else if (block.name === 'search_uploaded_documents') {
+              result = await searchUploadedDocuments(block.input as any, sessionDb);
             } else {
               result = { error: `Tool ${block.name} not found.` };
             }
@@ -309,8 +353,11 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
           loopCount++;
         } else {
           // Final text response
-          const textBlock = responseContent.find((block: any) => block.type === 'text');
-          const reply = textBlock?.text || 'No response generated.';
+          const reply = responseContent
+            .filter((block: any) => block.type === 'text')
+            .map((block: any) => block.text)
+            .join('\n\n')
+            .trim() || 'No response generated.';
           return NextResponse.json({ content: reply });
         }
       }
@@ -451,7 +498,7 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
           } else if (call.name === 'get_general_time_series_data') {
             result = await getGeneralTimeSeriesData(call.args as any);
           } else if (call.name === 'search_uploaded_documents') {
-            result = await searchUploadedDocuments(call.args as any);
+            result = await searchUploadedDocuments(call.args as any, sessionDb);
           } else {
             result = { error: `Tool ${call.name} not found.` };
           }

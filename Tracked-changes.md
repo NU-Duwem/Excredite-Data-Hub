@@ -16,8 +16,100 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-17 · Documents for the AI, step 1: free embeddings, real search, open access with admin restrictions, locked-down routes
+**Branch:** `dev` · **PR:** pending · **Status:** Open
+
+**What and why:** This prepares the app for the bulk import of about 4 GB of documents. Checking the existing setup turned up these problems:
+- **Search by meaning had never worked:** all 46 stored chunk embeddings were zeros, because the Gemini embedding calls failed and the code silently saved placeholders.
+- **The AI ignored embeddings:** it found only chunks containing the question as an exact phrase.
+- **Claude never searched documents:** it wasn't given the document-search tool, and its default model (`claude-3-5-sonnet-20241022`) is retired.
+- **Access rules were bypassed:** the AI's document search ran with full server rights.
+- **Routes without a sign-in check:** `/api/chat`, `/api/documents/[id]/download` and `/api/documents/process` worked without signing in, so anyone with a document's id could download it.
+- **Any signed-in user could delete or overwrite any document.**
+- **Wrong role check:** the Documents page read the role from `user_metadata`, which no longer holds roles, and showed made-up documents when the library was empty.
+- **Document text went to Gemini:** the processor sent the first 4,000 characters of every document there for a summary. You asked for document text not to go to Gemini.
+
+**Decisions (from you):**
+- **Embeddings:** use whichever option is free. That's the open-source `gte-small` model, run locally: no cost, and no text leaves our systems to create embeddings.
+- **Access:** every user can read Legal-Privileged documents, and admins keep control of permissions.
+
+**Database (migration 15, already applied to the live database):**
+- **Documents:**
+  - every signed-in user can read every document, so classification is now a label only;
+  - new `restricted` flag: a restricted document is visible only to admins, the app's service roles, and people listed in `document_user_access`;
+  - admins can update documents.
+- **Embeddings:**
+  - 384 dimensions for `gte-small`, half the size of before, which helps on the Free plan;
+  - the old all-zero vectors are cleared, though the chunk text stays and is still found by keyword search;
+  - an HNSW index replaces the ivfflat index;
+  - chunks are readable by whoever can read their document, and anonymous access is revoked.
+- **New `match_document_chunks()`:** a meaning-plus-keyword search (reciprocal rank fusion) that runs with the caller's permissions, so it never returns restricted text to someone without access.
+
+**App:**
+- **`utils/embeddings.ts` (new):** local `gte-small` embeddings through `@huggingface/transformers`, shared by document processing and search. It throws on failure and never stores placeholders.
+- **Document processing:**
+  - uses the new embeddings, and marks a document FAILED with a reason instead of hiding errors;
+  - saves the page and slide number with each chunk;
+  - no longer sends text to Gemini, so summaries are off for now.
+- **AI chat (`/api/chat`):**
+  - requires sign-in;
+  - searches documents as the signed-in user, with the new search;
+  - Claude now has the document-search tool;
+  - Claude's default model is `claude-opus-5-5`, with `temperature` removed (current models reject it) and `max_tokens` raised to 16,000;
+  - server-side refusal fallbacks are on (`fallbacks: "default"`), refusals are handled, and all text blocks are joined into the answer.
+- **Document routes:**
+  - download, ask-about-a-document and copy only work on documents the user can see;
+  - overwrite, delete, bulk delete (all or nothing) and re-process are limited to admins or the uploader;
+  - re-processing now waits for the result (up to 300 s) instead of running in the background, where a hosting platform could stop it;
+  - the storage bucket's "create if missing" fallbacks no longer create a **public** bucket.
+- **Documents page:**
+  - the role is read from `user_profiles`, and the made-up documents are gone;
+  - **Access** (admins): choose "Everyone signed in" or "Restricted", and grant or remove access per person;
+  - **Re-process** (admins and uploaders), with a result message;
+  - a **Restricted** badge in the list and the workspace;
+  - the delete button is hidden from people who can't delete.
+
+**Files:**
+- `15_document_access_and_search.sql` (new)
+- `README.md`
+- `frontend/package.json` and `frontend/package-lock.json` (`@huggingface/transformers`)
+- `frontend/utils/embeddings.ts` (new)
+- `frontend/utils/documentAccess.ts` (new)
+- `frontend/utils/documentProcessor.ts`
+- `frontend/app/api/chat/route.ts`
+- `frontend/app/api/documents/{process,upload,edit,bulk-delete}/route.ts`
+- `frontend/app/api/documents/[id]/{route,download/route,query/route}.ts`
+- `frontend/app/documents/page.tsx`
+- `frontend/app/documents/AccessDialog.tsx` (new)
+- tests: `utils/__tests__/embeddings.test.ts`, `utils/__tests__/documentAccess.test.ts`
+
+**Manual steps:**
+- **Other databases:** run `15_document_access_and_search.sql`. The live project already has it.
+- **Existing documents:** open each of the 4 and click **Re-process**, so they're embedded with the new model. Until then, keyword search still finds them.
+- **First use:** the model (~34 MB) downloads from Hugging Face. On Vercel it's cached under `/tmp`. You can set `EMBEDDINGS_CACHE_DIR` to choose the folder.
+
+**Not in this step:** bulk import, OCR for scanned pages, and storage sizing. Those are step 2: a dry-run report, then the import tool.
+
+**Tested:**
+- **Live database, in rolled-back transactions:**
+  - an analyst can read a Legal-Privileged document, but can't see a restricted one or its text, including through search;
+  - an analyst can't restrict documents; an admin can;
+  - after a grant, the analyst sees the restricted document and its text;
+  - anonymous visitors see nothing;
+  - with real `gte-small` vectors, meaning search found the right passage for a question sharing no keywords with it, and hybrid search ranked the expected chunks.
+- **Security advisor:** no new findings.
+- **Tests:** 196 Vitest tests pass, including the new embedding and access tests. The real-model test passes with `RUN_MODEL_TESTS=1`.
+- **Build and type check:** `next build` and `tsc` pass. The Documents page's lint count is unchanged at 28, all in older code.
+- **API routes:** without a sign-in, `/api/chat`, download and process return 401.
+- **End to end, against a local fake Supabase:** an admin's **Re-process** downloaded the file, extracted 3 chunks, embedded each with `gte-small` inside the Next.js server (384 non-zero numbers each), saved them and marked the document COMPLETE.
+- **Chromium:**
+  - an admin sees Access and Re-process, can restrict a document and grant access, and the exact database writes were checked;
+  - an analyst who didn't upload the document sees neither button.
+
+---
+
 ## 2026-11-17 · News feeds: power and energy sections instead of front pages
-**Branch:** `dev` · **PR:** #2 · **Status:** Open
+**Branch:** `dev` · **PR:** #2 · **Status:** Merged
 
 **What and why:** Most Nigerian outlets had brought in no power stories at all: BusinessDay, Daily Trust, Premium Times and Vanguard none, and Nairametrics 2. A newspaper's main feed carries its latest stories on every topic, so the few power stories scroll out before they're pulled. I tested each outlet's electricity tag or energy section with the app's own parser and power-news filter, without saving anything, and switched to those feeds.
 

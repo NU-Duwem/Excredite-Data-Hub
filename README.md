@@ -89,6 +89,7 @@ Run these files in the Supabase **SQL Editor**, in this order. Each one is safe 
 | 14 | `13_alerts.sql` | Alert categories, severity, evidence, reporting, triage and automatic feed alerts |
 | 15 | `14_news_sources_sections.sql` | Points outlets at their power and energy feeds |
 | 16 | `15_document_access_and_search.sql` | Restricted documents and access grants; `gte-small` embeddings with hybrid search |
+| 17 | `16_staff_emails.sql` | One-off: moves staff to their `firstname@excredite.ng` sign-in emails and removes the shared admin account |
 
 **After running the SQL:**
 - Deploy the edge functions with the [Supabase CLI](https://supabase.com/docs/guides/cli):
@@ -314,7 +315,7 @@ The full history of code and database changes is in [`Tracked-changes.md`](Track
 │   └── vercel.json               # Daily news pull on Vercel
 ├── supabase/functions/           # Edge functions: admin-invite-user, generate-signed-url
 ├── schema.sql                    # Core tables
-├── 01_… to 15_….sql              # Migrations, run in order (see Local Setup)
+├── 01_… to 16_….sql              # Migrations, run in order (see Local Setup)
 ├── docs/                         # Requirements and technical documentation
 ├── Tracked-changes.md            # Change log
 └── CLAUDE.md                     # Rules for branches, the change log and SQL

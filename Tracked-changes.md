@@ -16,6 +16,35 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Staff sign-in emails; shared admin account removed
+**Branch:** `dev` · **PR:** #7 · **Status:** Open
+
+**What and why:** You asked for every staff account to use its short company address, and for the shared admin account to be removed. Two accounts also still signed in with the misspelling "expo" left over from `04_name_fix.sql`.
+
+**Changes (already applied to the live database):**
+
+| Person | Old sign-in email | New |
+|---|---|---|
+| Duwem Nwapi | duwem.nwapi@excredite.ng | duwem@excredite.ng |
+| Eyo Ekpo | eyo.expo@excredite.ng | eyo@excredite.ng |
+| Philip Ekpo | philip.expo@excredite.ng | phillip@excredite.ng |
+| Taiwo Odugbemi | taiwo.odugbemi@excredite.ng | taiwo@excredite.ng |
+| Osefan Anegbe | osefan.anegbe@excredite.ng | osefan@excredite.ng |
+
+- **For each person, updated:** the sign-in email, the email sign-in identity and the profile email. All three now match.
+- **Kept:** passwords, roles and everything each person owns.
+- **No emails sent:** addresses were changed directly and marked confirmed.
+- **Removed:** `admin@excredite.ng`, with its profile, sessions and 23 activity-log entries. It owned no documents, alerts, jobs, tasks, settings or access grants.
+- **Code:** no hard-coded staff emails in the code needed changing.
+
+**Files:** `16_staff_emails.sql` (new: the record of the change, safe to re-run), `README.md` (SQL run order), `Tracked-changes.md`.
+
+**Manual steps:** none for this database. Staff sign in with their new address and their existing password.
+
+**Testing:** a query after the change confirmed that each user's sign-in, identity and profile emails match and the admin account is gone. The Supabase security advisor shows only the existing leaked-password warning, which needs a paid plan.
+
+---
+
 ## 2026-11-18 · README rewritten to match the project
 **Branch:** `dev` · **PR:** #7 · **Status:** Open
 

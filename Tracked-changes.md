@@ -16,8 +16,84 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Overview rebuilt around regularly updated data
+**Branch:** `dev` · **PR:** #11 · **Status:** Open
+
+**What and why:** You asked for the Overview to use data that is updated regularly instead of generation data, which isn't readily available. The newest generation record in the database is from 30 June 2024, so the "Daily generation" chart and the "Installed capacity" tile were showing old figures.
+
+**Changes:**
+- **Removed:** the "Daily generation" chart and the "Installed capacity" tile.
+- **New big green tile, "Power-sector news":**
+  - the four latest headlines, each with source, age and topic;
+  - how many stories arrived in the last 7 days, from how many active sources, and when the feeds were last checked;
+  - **Refresh** and **All news**.
+- **New amber tile, "Open alerts":** the number waiting for review, how many are critical or high, the latest alert, and a link to review them. When there are none, it says "All clear" and links to reporting one.
+- **New "My tasks":** your open tasks from the work board (assigned to you or to the whole team), soonest first, with overdue tasks in red and the job name. People who can't see the work board get a short note instead.
+- **Kept "Next deadlines":** the next job deadlines.
+- **New "This week's topics":** stories per news topic over the last 7 days, with the most covered topic highlighted. Each topic opens News & Updates filtered to it.
+- **Replacing "Document processing", new "Recent documents":** the three newest documents, with their processing state, a total count, a warning if any failed, and **Upload document**.
+- **Links from the Overview:**
+  - News & Updates now accepts `?topic=<id>`;
+  - Documents now accepts `?doc=<id>`, which opens that document.
+- **Smaller fixes:** the greeting uses your saved profile name, and "this week" and "overdue" are worked out from when the page loaded.
+
+**Files:**
+- **Pages:** `frontend/app/page.tsx`, `frontend/app/news/page.tsx`, `frontend/app/documents/page.tsx`.
+- **Helpers and tests:** `frontend/utils/overview.ts`, `frontend/utils/__tests__/overview.test.ts`.
+- **Log:** `Tracked-changes.md`.
+
+**Manual steps:** none.
+
+**Testing:**
+- **Unit tests:** 233 pass, 1 skipped. New tests cover topic counts, the 7-day window, "my tasks" ordering, alert severity counts and time formatting.
+- **Code checks:** TypeScript is clean, with no new lint problems.
+- **Screenshots** against a fake Supabase server with sample data, on a computer and a phone.
+- **Links:** `/news?topic=grid` and `/documents?doc=…` both load.
+
+---
+
+## 2026-11-18 · Per-person access to Regulatory & Advisory Matters (prepared, not applied yet)
+**Branch:** `dev` · **PR:** #11 · **Status:** Open, **SQL not yet applied**
+
+**What and why:** You asked to give Taiwo (Research Analyst) access to Regulatory & Advisory Matters. You chose "view and work on tasks", for Taiwo only. Today only System Admins, the CEO and the Legal Team can see the work board.
+
+**Changes (in `20_matter_access.sql`, not yet applied: Supabase's approval request timed out):**
+- **Per-person grants:** a new `public.matter_access_grants` table. People can read their own grant and admins can read all. Only the server writes it.
+- **What a grant allows:** `private.has_matter_grant()` is used by the database rules, so someone with a grant can:
+  - see all jobs and tasks;
+  - create, edit, complete and delete tasks;
+  - be assigned tasks, because they appear in `list_matter_people()`.
+- **Unchanged:** creating and editing jobs stays with Admins and Legal.
+- **First grant:** Taiwo.
+
+**Still to do after the SQL is applied:**
+- **Work-board page:** use the grant, showing task controls without job editing.
+- **Admin Panel:** a switch to give or remove this access.
+- **Checks:** run as Taiwo and rolled back, plus the security advisor.
+
+**Files:** `20_matter_access.sql`, `Tracked-changes.md`.
+
+**Manual steps:** none yet. Claude will apply the SQL once you approve the Supabase request.
+
+**Testing:** not yet. It will run once the SQL is applied.
+
+---
+
+## 2026-11-18 · Profile & Settings: picture hint removed
+**Branch:** `dev` · **PR:** #11 · **Status:** Open
+
+**What and why:** You asked to remove "JPG, PNG or WebP. Your picture is cropped to a square and shown to signed-in staff only." from Profile & Settings. The upload control there now shows only the picture and its buttons. The Admin Panel, which uses the same control, still shows the hint.
+
+**Files:** `frontend/app/components/AvatarEditor.tsx`, `Tracked-changes.md`.
+
+**Manual steps:** none.
+
+**Testing:** TypeScript and ESLint are clean for the file. Text-only change.
+
+---
+
 ## 2026-11-18 · Sidebar showed the previous person after switching accounts
-**Branch:** `dev` · **PR:** #10 · **Status:** Open
+**Branch:** `dev` · **PR:** #10 · **Status:** Merged
 
 **What and why:** You signed in as Phillip, but the bottom of the sidebar still showed Duwem and his role. The sidebar is part of the page frame and stays loaded when you sign out and sign in again without a full page reload, but it only loaded the signed-in person once, when the app first opened. Two related problems in the same code:
 - after signing out, the **Sign out** button stayed on "Signing out…" (disabled) for the next person;
@@ -43,7 +119,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Login page wording
-**Branch:** `dev` · **PR:** #10 · **Status:** Open
+**Branch:** `dev` · **PR:** #10 · **Status:** Merged
 
 **What and why:** You asked to drop "work" from the login line. It now reads "Use your Excredite email (@excredite.ng)."
 

@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Taiwo can use Regulatory & Advisory Matters; Admin Panel switch
-**Branch:** `dev` · **PR:** none yet · **Status:** Open
+**Branch:** `dev` · **PR:** #12 · **Status:** Open
 
 **What and why:** You approved applying `20_matter_access.sql`, so Taiwo (Research Analyst) now has the access you chose: he can see every job and task, and work on tasks. This finishes that work.
 

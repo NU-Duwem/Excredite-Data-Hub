@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Drafting Desk replaces the document generator
-**Branch:** `dev` · **PR:** none yet · **Status:** Open
+**Branch:** `dev` · **PR:** #13 · **Status:** Open
 
 **What and why:** You asked for the researched "Drafting Desk" design to be built. The old "Generate a document" page wasn't real:
 - whatever you asked for, it waited 6 seconds and showed the same template with made-up figures ("4,350 MW", "78.5%");
@@ -90,7 +90,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Taiwo can use Regulatory & Advisory Matters; Admin Panel switch
-**Branch:** `dev` · **PR:** #12 · **Status:** Open
+**Branch:** `dev` · **PR:** #12 · **Status:** Merged
 
 **What and why:** You approved applying `20_matter_access.sql`, so Taiwo (Research Analyst) now has the access you chose: he can see every job and task, and work on tasks. This finishes that work.
 

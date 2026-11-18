@@ -96,6 +96,7 @@ Run these files in the Supabase **SQL Editor**, in this order. Each one is safe 
 | 18 | `17_profile_pictures_and_company_accounts.sql` | Profile pictures (column, private `avatars` bucket, storage rules, pictures on the work board) and a rule allowing only `@excredite.ng` accounts |
 | 19 | `18_allowed_accounts.sql` | Only addresses on the server-only `allowed_accounts` list can hold an account |
 | 20 | `19_temporary_passwords.sql` | One-time temporary passwords for a person's first sign-in (hashed, expire, lock after 5 wrong tries) |
+| 21 | `20_matter_access.sql` | Per-person access to Regulatory & Advisory Matters: see everything and work on tasks (first grant: Taiwo) |
 
 **After running the SQL:**
 - Deploy the edge functions with the [Supabase CLI](https://supabase.com/docs/guides/cli):
@@ -356,7 +357,7 @@ The full history of code and database changes is in [`Tracked-changes.md`](Track
 │   └── vercel.json               # Daily news pull on Vercel
 ├── supabase/functions/           # Edge functions: admin-invite-user, generate-signed-url
 ├── schema.sql                    # Core tables
-├── 01_… to 19_….sql              # Migrations, run in order (see Local Setup)
+├── 01_… to 20_….sql              # Migrations, run in order (see Local Setup)
 ├── docs/                         # Requirements and technical documentation
 ├── Tracked-changes.md            # Change log
 └── CLAUDE.md                     # Rules for branches, the change log and SQL

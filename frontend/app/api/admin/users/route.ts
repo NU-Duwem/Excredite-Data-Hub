@@ -397,6 +397,32 @@ export async function POST(req: Request) {
       }
 
       // ============================================
+      // REGULATORY & ADVISORY MATTERS ACCESS (per person, 20_matter_access.sql):
+      // value true = see everything and work on tasks; false = remove.
+      // ============================================
+      case 'set-matter-access': {
+        if (!targetUserId || typeof value !== 'boolean') {
+          return NextResponse.json({ error: 'targetUserId and value (true or false) are required' }, { status: 400 });
+        }
+        const { data: target } = await adminClient.from('user_profiles').select('id').eq('id', targetUserId).single();
+        if (!target) {
+          return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
+        const { error } = value
+          ? await adminClient.from('matter_access_grants').upsert({ user_id: targetUserId, granted_by: auth.user.id }, { onConflict: 'user_id' })
+          : await adminClient.from('matter_access_grants').delete().eq('user_id', targetUserId);
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        await adminClient.from('user_activity_log').insert({
+          user_id: auth.user.id,
+          action: 'ADMIN_SET_MATTER_ACCESS',
+          details: `Admin ${value ? 'gave' : 'removed'} Regulatory & Advisory Matters access for user ${targetUserId}`,
+        });
+        return NextResponse.json({ success: true, message: value ? 'Access to Regulatory & Advisory Matters given.' : 'Access to Regulatory & Advisory Matters removed.' });
+      }
+
+      // ============================================
       // SET PROFILE PICTURE (the admin has already uploaded the file to
       // avatars/<targetUserId>/…; value is its path, or null to remove)
       // ============================================

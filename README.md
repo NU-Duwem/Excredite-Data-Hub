@@ -20,7 +20,8 @@ The **Excredite Electricity Data Hub (EPDH)** is Excredite's internal intelligen
 | Auth | Supabase Auth. The login page's **Sign in with email** button uses Excredite's Microsoft 365 (Entra ID) behind the scenes, and email and password works until that's switched on. Only addresses on the allowed list (`public.allowed_accounts`, all `@excredite.ng`) can hold an account. Roles are stored in `user_profiles` and only admins or the server can set them |
 | Document search | pgvector (384 dimensions, HNSW index) plus full-text search in one hybrid search function |
 | Embeddings | `gte-small`, run locally by `@huggingface/transformers`. It's free and needs no API key |
-| AI answers | Claude (Anthropic) or Gemini (Google). Claude defaults to `claude-opus-5-5`, with automatic fallback |
+| AI answers | Claude (Anthropic) or Gemini (Google). Claude defaults to `claude-opus-5-5`, with automatic fallback. The Drafting Desk uses the official Anthropic SDK (`@anthropic-ai/sdk`) with structured JSON output |
+| Word files | `docx` writes Drafting Desk documents in Excredite's house style |
 | Text extraction | pdfjs-dist (PDF), mammoth (Word), jszip (PowerPoint), xlsx (Excel/CSV) |
 | News | RSS feeds pulled by `pg_cron` and `pg_net`, or on demand from the app |
 | Edge functions | `admin-invite-user` and `generate-signed-url`, in `supabase/functions/` |
@@ -40,6 +41,13 @@ The sidebar has these pages:
   - Classifications: Public, Internal and Legal-Privileged. Every signed-in user can read every document unless an admin marks it **Restricted**; then only admins and the people they grant access can read it.
   - Preview, download, edit details, re-process and bulk delete.
   - Bulk import from a folder with `npm run import-docs` (see below).
+- **Drafting Desk** (Documents → Generate a document): turns a request into a cited Word draft in four checkpoints.
+  1. **Brief:** what you need, who will read it, the job, and whether to start from a firm template, a precedent or a blank page. EPDH finds matching library documents (only ones you can open), recent news and the job's tasks.
+  2. **Evidence:** a table with sources as rows and questions as columns. Every cell is answered from that source with its page and a short quote, which is checked word for word against the source. You can correct any cell. Conflicts between sources are flagged and can be raised as an Alert.
+  3. **Outline:** approve, reorder or edit the sections. Each shows the evidence it will use.
+  4. **Draft & review:** written only from the evidence table, with every paragraph cited. Assumptions and gaps are flagged, AI revisions come back as tracked changes, and a pre-send checklist runs before you **Download Word** or **Save to the library** (linked to the job and searchable by the AI).
+
+  Drafts autosave and are private to you. A finished run can be saved as a workflow for the team.
 - **News & Updates** (`/news`): power-sector news from RSS feeds, with topic filters and **Refresh feeds**.
 - **Regulatory & Advisory Matters** (`/matters`): a work board of the firm's jobs. Each job has a lead, a timeline and tasks, and each task has an assignee (one person or the whole team), a due date and a status.
 - **Alerts** (`/alerts`): one place for anything the team must not miss:
@@ -97,6 +105,7 @@ Run these files in the Supabase **SQL Editor**, in this order. Each one is safe 
 | 19 | `18_allowed_accounts.sql` | Only addresses on the server-only `allowed_accounts` list can hold an account |
 | 20 | `19_temporary_passwords.sql` | One-time temporary passwords for a person's first sign-in (hashed, expire, lock after 5 wrong tries) |
 | 21 | `20_matter_access.sql` | Per-person access to Regulatory & Advisory Matters: see everything and work on tasks (first grant: Taiwo) |
+| 22 | `21_drafting.sql` | Drafting Desk: private autosaved drafts and shared workflows |
 
 **After running the SQL:**
 - Deploy the edge functions with the [Supabase CLI](https://supabase.com/docs/guides/cli):
@@ -350,14 +359,14 @@ The full history of code and database changes is in [`Tracked-changes.md`](Track
 │   │   ├── auth/callback/        # Finishes Sign in with email (Microsoft 365)
 │   │   ├── api/auth/             # Temporary-password sign-in; first password chosen
 │   │   ├── components/           # Sidebar, Avatar, AvatarEditor
-│   │   └── api/                  # Server routes: chat, documents, news ingest, admin users
-│   ├── utils/                    # Extraction, embeddings, access, alerts, news, Supabase clients (+ __tests__)
+│   │   └── api/                  # Server routes: chat, documents, drafting, news ingest, admin users
+│   ├── utils/                    # Extraction, embeddings, access, alerts, news, drafting, Supabase clients (+ __tests__)
 │   ├── scripts/import-documents.ts   # Bulk import tool
 │   ├── next.config.ts
 │   └── vercel.json               # Daily news pull on Vercel
 ├── supabase/functions/           # Edge functions: admin-invite-user, generate-signed-url
 ├── schema.sql                    # Core tables
-├── 01_… to 20_….sql              # Migrations, run in order (see Local Setup)
+├── 01_… to 21_….sql              # Migrations, run in order (see Local Setup)
 ├── docs/                         # Requirements and technical documentation
 ├── Tracked-changes.md            # Change log
 └── CLAUDE.md                     # Rules for branches, the change log and SQL

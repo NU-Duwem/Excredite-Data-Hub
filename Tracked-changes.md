@@ -16,6 +16,79 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Drafting Desk replaces the document generator
+**Branch:** `dev` · **PR:** none yet · **Status:** Open
+
+**What and why:** You asked for the researched "Drafting Desk" design to be built. The old "Generate a document" page wasn't real:
+- whatever you asked for, it waited 6 seconds and showed the same template with made-up figures ("4,350 MW", "78.5%");
+- it read no documents;
+- its PDF, Word and Spreadsheet options made no file;
+- "Save configuration" saved nothing;
+- "Save to Registry" always failed, because it wrote to a database column that doesn't exist.
+
+**Changes:**
+- **Drafting Desk** (Documents → Generate a document), four checkpoints:
+  1. **Brief:** request, document type (regulatory brief, client memo, sector briefing, job status report, letter, other), reader, job, and start from a firm template, a precedent or a blank page. **Find sources** searches the library as the signed-in person, so restricted documents stay hidden, using the same meaning and keyword search as the AI Query. It also searches the last 120 days of news and the linked job's tasks. Sources can be unticked, and confidential ones are labelled.
+  2. **Evidence:**
+     - the AI proposes 3 to 5 questions, which you can edit;
+     - each source is read and every cell answered from it, with its location (page, slide or sheet) and a short quote;
+     - each quote is checked word for word against the source, and any it can't find are marked "Check quote";
+     - cells can be corrected;
+     - conflicts between sources are found, and **Raise an alert** files one on the Alerts page under Document contradictions, without duplicates.
+  3. **Outline:** proposed from the evidence, following the precedent's structure if one was chosen. Sections can be edited, reordered, added or removed, and citations that don't match the table are removed.
+  4. **Draft & review:**
+     - written only from the evidence table; every paragraph carries its citations, and paragraphs with none are flagged;
+     - assumptions and gaps are shown;
+     - **Revise** on any section returns a tracked change (deleted and inserted words) to accept or reject, and paragraphs can be edited directly;
+     - a pre-send checklist covers uncited paragraphs, assumptions, gaps, legal-privileged or restricted sources going to an outside reader, and unreviewed changes;
+     - **Download Word** makes a real .docx in house style: a header, headings, citations after each paragraph, a sources list and page numbers;
+     - **Save to the library** stores the Word file, links it to the job, and processes it so the AI can search it.
+- **Autosave and workflows:** drafts autosave every few seconds and are private to their owner; reopen them from **My drafts & workflows**. **Save as workflow** stores the type, reader, request, questions, outline and precedent, shared with the team or private, to start the next run quickly.
+- **Database** (`21_drafting.sql`, already applied):
+  - `drafting_sessions`: only the owner can see or change a draft, admins included;
+  - `drafting_workflows`: shared or private; only the owner or an admin can change or delete one.
+- **AI:** uses the official Anthropic SDK with structured JSON output, so every answer is checked against a fixed shape. It uses `claude-opus-5-5` with automatic server-side fallback. Effort is low for questions and conflicts, medium for evidence and outline, and high for the draft. If only a Gemini key is set, it uses Gemini instead. The AI is told to use only the facts it's given, and every citation is checked against the table.
+- **Removed:** the fake generator code, and the broken `save-generated` server action.
+- **New packages:** `@anthropic-ai/sdk`, `zod` and `docx`. Run `npm install`.
+
+**Files:**
+- **Database:** `21_drafting.sql`.
+- **Pages:** `frontend/app/documents/DraftingDesk.tsx`, `frontend/app/documents/page.tsx`.
+- **Server:** `frontend/app/api/drafting/[step]/route.ts`, `frontend/app/api/documents/edit/route.ts`.
+- **Helpers:** `frontend/utils/drafting/core.ts`, `steps.ts`, `llm.ts` and `docx.ts`.
+- **Tests:** `frontend/utils/__tests__/drafting.test.ts`, `frontend/utils/__tests__/draftingDocx.test.ts`.
+- **Packages:** `frontend/package.json`, `frontend/package-lock.json`.
+- **Docs:** `README.md`, `Tracked-changes.md`.
+
+**Manual steps:**
+1. In `frontend`, run `npm install` to get the new packages.
+2. `ANTHROPIC_API_KEY` (or `GEMINI_API_KEY`) must be set, as it already is for the AI Query.
+3. The SQL is already applied.
+
+**Testing:**
+- **Unit tests:** 251 pass, 1 skipped. 18 new tests cover citation keys and labels, choosing source passages, quote checking, citation clean-up, the evidence text, the pre-send checks, the tracked-changes comparison, plain text, and the Word file contents.
+- **Code checks:** TypeScript is clean, and lint errors in the touched files fell from 20 to 18.
+- **Build:** `next build --webpack` succeeds.
+- **End to end:** a browser test against a fake Supabase and a fake AI service that answers in Claude's structured-output shape, walking through all four checkpoints:
+  - 4 sources found; questions proposed; the table filled with 9 cited cells, with the date conflict found and raised as an alert;
+  - a corrected cell kept, with an invented evidence key dropped from the outline;
+  - sections reordered; the draft written with inline markers removed;
+  - an invented citation removed and reported, and an uncited paragraph flagged;
+  - a revision shown as tracked changes, with Download blocked until it was accepted;
+  - the Word file downloaded and checked, saved to the library linked to the job, and saved as a workflow;
+  - the draft reopened at checkpoint 4, and a new draft started from the workflow.
+
+  The requests to the AI used `claude-opus-5-5`, the fallback setting, a JSON schema, and the intended effort per step.
+- **Live database, as real users, rolled back afterwards:**
+  - drafts are private to their owner, and an admin can't see others';
+  - nobody can create a draft for someone else;
+  - shared workflows are visible to all and private ones only to their owner;
+  - only the owner or an admin can change a workflow.
+- **Security advisor:** no new findings.
+- **Not tested:** a run with the real AI and the real library, because this environment has no AI key. Please try one real brief and tell me how the evidence and draft read.
+
+---
+
 ## 2026-11-18 · Taiwo can use Regulatory & Advisory Matters; Admin Panel switch
 **Branch:** `dev` · **PR:** #12 · **Status:** Open
 

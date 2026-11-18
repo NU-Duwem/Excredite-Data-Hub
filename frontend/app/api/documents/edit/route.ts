@@ -115,42 +115,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, document: data });
     }
 
-    if (action === 'save-generated') {
-      if (!title || !content) {
-        return NextResponse.json({ error: 'Missing title or content' }, { status: 400 });
-      }
-
-      // Save AI generated document directly to the registry database
-      const { data, error } = await adminClient
-        .from('documents')
-        .insert({
-          title,
-          document_type: documentType || 'DOCUMENT_NOTE',
-          classification: classification || 'INTERNAL',
-          processing_status: 'COMPLETE',
-          notes: content, // Save body text as notes
-          uploaded_by: user.email,
-          source: 'ai_generated',
-          matter_id: matterId || null,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error saving generated document:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-
-      // Log activity
-      await adminClient.from('user_activity_log').insert({
-        user_id: user.id,
-        action: 'DOCUMENT_GENERATED',
-        details: `Saved AI generated document: "${title}"`,
-      });
-
-      return NextResponse.json({ success: true, document: data });
-    }
-
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
 
   } catch (err: any) {

@@ -19,7 +19,7 @@
 --
 -- First grant: Taiwo Odugbemi (taiwo@excredite.ng), Research Analyst.
 --
--- STATUS: prepared, NOT YET APPLIED to the live database (waiting for approval).
+-- STATUS: applied to the live database on 2026-11-18.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS public.matter_access_grants (

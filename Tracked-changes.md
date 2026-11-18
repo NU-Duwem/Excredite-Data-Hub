@@ -16,8 +16,48 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-18 · Taiwo can use Regulatory & Advisory Matters; Admin Panel switch
+**Branch:** `dev` · **PR:** #12 · **Status:** Open
+
+**What and why:** You approved applying `20_matter_access.sql`, so Taiwo (Research Analyst) now has the access you chose: he can see every job and task, and work on tasks. This finishes that work.
+
+**Changes:**
+- **Database (applied):** the per-person grants table, the rules that use it, and Taiwo's grant. Details are in the entry below.
+- **Work board (`/matters`):**
+  - people with a grant can open the board;
+  - they can add, edit, drag, complete and delete tasks, and be assigned them;
+  - **New job** and **Edit job** stay with Admins and Legal.
+- **Admin Panel:**
+  - each person's details have a new **Extra access** section with a **Regulatory & Advisory Matters** switch;
+  - the switch saves straight away and is logged as `ADMIN_SET_MATTER_ACCESS`;
+  - for roles that already include the board, it says so instead.
+- **New server action:** `set-matter-access` on `/api/admin/users`.
+- **Overview:** "My tasks" now works for people with a grant, with no code change needed.
+- **README:** the SQL run order now includes `20_matter_access.sql`.
+
+**Files:** `20_matter_access.sql` (status note), `frontend/app/matters/page.tsx`, `frontend/app/admin/page.tsx`, `frontend/app/api/admin/users/route.ts`, `README.md`, `Tracked-changes.md`.
+
+**Manual steps:** none. Taiwo needs to reload the app, or sign out and in again.
+
+**Testing:**
+- **Live database, acting as Taiwo, rolled back afterwards:**
+  - he sees all 4 jobs;
+  - he can create, complete and delete a task;
+  - editing a job changes nothing;
+  - he can't grant himself access;
+  - he appears in the people list;
+  - without the grant he sees no jobs and can't add tasks.
+- **Security advisor:** no new findings.
+- **Browser check** against a fake Supabase server, as Taiwo:
+  - with the grant, he sees the job and task and gets **Add task**, but no **New job** or **Edit job**;
+  - without it, he sees nothing.
+- **Unit tests:** 233 pass, 1 skipped.
+- **Code checks:** TypeScript is clean, with no new lint problems.
+
+---
+
 ## 2026-11-18 · Overview rebuilt around regularly updated data
-**Branch:** `dev` · **PR:** #11 · **Status:** Open
+**Branch:** `dev` · **PR:** #11 · **Status:** Merged
 
 **What and why:** You asked for the Overview to use data that is updated regularly instead of generation data, which isn't readily available. The newest generation record in the database is from 30 June 2024, so the "Daily generation" chart and the "Installed capacity" tile were showing old figures.
 
@@ -53,7 +93,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Per-person access to Regulatory & Advisory Matters (prepared, not applied yet)
-**Branch:** `dev` · **PR:** #11 · **Status:** Open, **SQL not yet applied**
+**Branch:** `dev` · **PR:** #11 · **Status:** Merged (SQL applied later, see the entry above)
 
 **What and why:** You asked to give Taiwo (Research Analyst) access to Regulatory & Advisory Matters. You chose "view and work on tasks", for Taiwo only. Today only System Admins, the CEO and the Legal Team can see the work board.
 
@@ -80,7 +120,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-18 · Profile & Settings: picture hint removed
-**Branch:** `dev` · **PR:** #11 · **Status:** Open
+**Branch:** `dev` · **PR:** #11 · **Status:** Merged
 
 **What and why:** You asked to remove "JPG, PNG or WebP. Your picture is cropped to a square and shown to signed-in staff only." from Profile & Settings. The upload control there now shows only the picture and its buttons. The Admin Panel, which uses the same control, still shows the hint.
 

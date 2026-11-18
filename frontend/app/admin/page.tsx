@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { getRoleDisplayName, PRIMARY_ROLES } from '@/utils/roles';
 import Avatar from '@/app/components/Avatar';
 import AvatarEditor from '@/app/components/AvatarEditor';
+import { MATTER_READ_ROLES } from '@/utils/matterTasks';
 
 type Profile = {
   id: string;
@@ -152,6 +153,8 @@ export default function AdminPanelPage() {
 
   // Users
   const [users, setUsers] = useState<Profile[]>([]);
+  // People given Regulatory & Advisory Matters access beyond their role (20_matter_access.sql)
+  const [matterGrants, setMatterGrants] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState('');
@@ -193,10 +196,15 @@ export default function AdminPanelPage() {
       const { data: me } = await supabase.from('user_profiles').select('role').eq('id', user.id).single();
       if (me?.role !== 'power_admin') return router.push('/query');
 
-      const [list, { data: settings }] = await Promise.all([loadUsers(), supabase.from('system_settings').select('key, value')]);
+      const [list, { data: settings }, { data: grants }] = await Promise.all([
+        loadUsers(),
+        supabase.from('system_settings').select('key, value'),
+        supabase.from('matter_access_grants').select('user_id'),
+      ]);
       if (!active) return;
       setMyId(user.id);
       setUsers(list);
+      setMatterGrants(new Set((grants ?? []).map((g) => g.user_id as string)));
       const t = settings?.find((s) => s.key === 'anomaly_detection_threshold');
       const e = settings?.find((s) => s.key === 'anomaly_alerts_enabled');
       if (t) setThreshold(t.value);
@@ -282,6 +290,25 @@ export default function AdminPanelPage() {
     } else {
       setStatus({ kind: 'ok', text: `Temporary password created for ${selected.full_name || selected.email}. Any earlier one no longer works.` });
       setIssued({ name: selected.full_name || d.email, ...d });
+    }
+    setBusy(false);
+  };
+
+  const toggleMatterAccess = async (on: boolean) => {
+    if (!selected) return;
+    setBusy(true);
+    setStatus({ kind: 'info', text: 'Saving…' });
+    const r = await callAdminApi({ action: 'set-matter-access', targetUserId: selected.id, value: on });
+    if (r.error) {
+      setStatus({ kind: 'error', text: r.error });
+    } else {
+      setMatterGrants((prev) => {
+        const next = new Set(prev);
+        if (on) next.add(selected.id);
+        else next.delete(selected.id);
+        return next;
+      });
+      setStatus({ kind: 'ok', text: `${selected.full_name || selected.email}: ${r.message}` });
     }
     setBusy(false);
   };
@@ -527,6 +554,29 @@ export default function AdminPanelPage() {
                         );
                       })}
                     </div>
+                  </div>
+
+                  <div className="max-w-2xl">
+                    <p className="text-[11px] font-extrabold tracking-wider uppercase text-gray-600 mb-2">Extra access</p>
+                    {MATTER_READ_ROLES.includes(selected.role) ? (
+                      <p className="text-sm text-gray-600">Regulatory &amp; Advisory Matters is already included with this role.</p>
+                    ) : (
+                      <label className="flex items-start gap-3 rounded-xl border border-gray-200 p-3.5 cursor-pointer hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-5 w-5 accent-brand shrink-0"
+                          checked={matterGrants.has(selected.id)}
+                          disabled={busy}
+                          onChange={(e) => toggleMatterAccess(e.target.checked)}
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-gray-900">Regulatory &amp; Advisory Matters</span>
+                          <span className="block text-xs text-gray-600">
+                            See every job and task, work on tasks and be assigned them. Creating and editing jobs stays with Admins and Legal. Saved straight away.
+                          </span>
+                        </span>
+                      </label>
+                    )}
                   </div>
 
                   <div className="pt-5 border-t border-gray-100 flex flex-wrap gap-2.5">

@@ -166,16 +166,23 @@ export default function MattersPage() {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
 
-  const canRead = !!role && MATTER_READ_ROLES.includes(role);
-  const canEdit = !!role && MATTER_WRITE_ROLES.includes(role);
+  // Roles decide access, plus a per-person grant (20_matter_access.sql) that lets
+  // someone see everything and work on tasks, but not create or edit jobs.
+  const [hasGrant, setHasGrant] = useState(false);
+  const canRead = (!!role && MATTER_READ_ROLES.includes(role)) || hasGrant;
+  const canEdit = !!role && MATTER_WRITE_ROLES.includes(role); // jobs
+  const canWorkTasks = canEdit || hasGrant;
 
   const load = useCallback(async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    const { data: profile } = user
-      ? await supabase.from('user_profiles').select('role').eq('id', user.id).single()
-      : { data: null };
+    const [{ data: profile }, { data: grant }] = user
+      ? await Promise.all([
+          supabase.from('user_profiles').select('role').eq('id', user.id).single(),
+          supabase.from('matter_access_grants').select('user_id').eq('user_id', user.id).maybeSingle(),
+        ])
+      : [{ data: null }, { data: null }];
     const [m, t, p, o] = await Promise.all([
       supabase.from('matters').select(MATTER_COLUMNS).is('deleted_at', null).order('created_at', { ascending: true }),
       supabase.from('matter_tasks').select(TASK_COLUMNS),
@@ -184,6 +191,7 @@ export default function MattersPage() {
     ]);
     setMe(user?.id ?? null);
     setRole(profile?.role ?? null);
+    setHasGrant(!!grant);
     setToday(localISODate(new Date()));
     setJobs((m.data ?? []).map(toJob));
     setTasks((t.data ?? []).map(toTask));
@@ -572,7 +580,7 @@ export default function MattersPage() {
               <div
                 key={s}
                 onDragOver={(e) => {
-                  if (!canEdit) return;
+                  if (!canWorkTasks) return;
                   e.preventDefault();
                   setDragOver(s);
                 }}
@@ -598,7 +606,7 @@ export default function MattersPage() {
                       <li key={t.id}>
                         <button
                           type="button"
-                          draggable={canEdit}
+                          draggable={canWorkTasks}
                           onDragStart={(e) => {
                             e.dataTransfer.setData('text/plain', t.id);
                             e.dataTransfer.effectAllowed = 'move';
@@ -624,7 +632,7 @@ export default function MattersPage() {
                   })}
                 </ul>
                 {columns[s].length === 0 && <p className="px-1.5 py-2 text-xs text-gray-700">Nothing here.</p>}
-                {canEdit && (
+                {canWorkTasks && (
                   <button type="button" onClick={() => openNewTask(s)} aria-label={`Add task to ${TASK_STATUS_LABELS[s]}`} className="min-h-10 rounded-xl border border-dashed border-gray-400 text-[13px] font-semibold text-gray-800 hover:bg-white/60">
                     + Add task
                   </button>
@@ -633,13 +641,13 @@ export default function MattersPage() {
             ))}
           </section>
         )}
-        {canEdit && shownJobs.length > 0 && (
+        {canWorkTasks && shownJobs.length > 0 && (
           <p className="text-xs text-gray-600">Drag a card to another column to change its status, or open it to edit.</p>
         )}
       </div>
 
       {taskDraft && (
-        <Modal title={taskDraft.id ? (canEdit ? 'Edit task' : 'Task') : 'Add task'} onClose={() => setTaskDraft(null)}>
+        <Modal title={taskDraft.id ? (canWorkTasks ? 'Edit task' : 'Task') : 'Add task'} onClose={() => setTaskDraft(null)}>
           <form
             noValidate
             onSubmit={(e) => {
@@ -648,7 +656,7 @@ export default function MattersPage() {
             }}
             className="px-6 pb-6 pt-4 flex flex-col gap-4"
           >
-            <fieldset disabled={!canEdit || saving} className="flex flex-col gap-4">
+            <fieldset disabled={!canWorkTasks || saving} className="flex flex-col gap-4">
               <div>
                 <label htmlFor="task-title" className={labelCls}>Task</label>
                 <input id="task-title" value={taskDraft.title} maxLength={300} onChange={(e) => setTaskDraft({ ...taskDraft, title: e.target.value })} className={inputCls} placeholder="e.g. Draft the tariff application" />
@@ -703,7 +711,7 @@ export default function MattersPage() {
                 {taskErrors.map((e) => <li key={e}>{e}</li>)}
               </ul>
             )}
-            {canEdit && (
+            {canWorkTasks && (
               <div className="flex flex-wrap items-center gap-2">
                 {taskDraft.id &&
                   (confirmDelete ? (

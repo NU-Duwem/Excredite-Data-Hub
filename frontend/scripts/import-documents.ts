@@ -92,10 +92,25 @@ async function listFiles(dir: string): Promise<string[]> {
 }
 
 async function alreadyImported(db: SupabaseClient, hash: string): Promise<string | null> {
-  const { data, error } = await db.from('documents').select('id, processing_status').eq('file_hash', hash).limit(1);
+  const { data, error } = await db.from('documents').select('id, processing_status').eq('file_hash', hash);
   if (error) throw new Error(`Checking for duplicates failed: ${error.message}`);
-  const row = data?.[0];
-  return row && row.processing_status === 'COMPLETE' ? (row.id as string) : null;
+  const done = data?.find((row) => row.processing_status === 'COMPLETE');
+  return done ? (done.id as string) : null;
+}
+
+/**
+ * Remove what an earlier, unfinished import of the same file left behind (a
+ * FAILED or PROCESSING row and any of its passages), so a re-run starts clean.
+ */
+async function clearUnfinished(db: SupabaseClient, hash: string): Promise<void> {
+  const { data, error } = await db.from('documents').select('id').eq('file_hash', hash).neq('processing_status', 'COMPLETE');
+  if (error) throw new Error(`Checking for an earlier failed import failed: ${error.message}`);
+  const ids = (data ?? []).map((row) => row.id as string);
+  if (ids.length === 0) return;
+  const { error: chunkError } = await db.from('embeddings').delete().in('document_id', ids);
+  if (chunkError) throw new Error(`Removing an earlier failed import failed: ${chunkError.message}`);
+  const { error: docError } = await db.from('documents').delete().in('id', ids);
+  if (docError) throw new Error(`Removing an earlier failed import failed: ${docError.message}`);
 }
 
 /** Content hash -> path, for files seen earlier in this run (catches copies in two folders). */
@@ -163,7 +178,13 @@ async function importOne(db: SupabaseClient, opts: ImportOptions, root: string, 
     }
   }
 
-  // 3. Document row, then its chunks, then mark it complete.
+  // 3. Clear any earlier failed attempt, then the document row, its chunks, and mark it complete.
+  try {
+    await clearUnfinished(db, hash);
+  } catch (err) {
+    return { ...result, note: err instanceof Error ? err.message : String(err) };
+  }
+  //    Document row, then its chunks, then mark it complete.
   const { data: doc, error: insertError } = await db
     .from('documents')
     .insert({

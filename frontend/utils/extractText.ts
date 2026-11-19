@@ -58,6 +58,17 @@ function meaningfulChars(text: string): number {
   return (text.match(/[\p{L}\p{N}]/gu) ?? []).length;
 }
 
+/**
+ * Remove characters the database can't store: NUL and other control characters
+ * (PDFs often contain them), and half of an emoji or other surrogate pair, which
+ * can be left behind when text is cut into chunks.
+ */
+export function cleanForDatabase(text: string): string {
+  return text
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
+
 /** Split text into ~1,200-character chunks with 200 characters of overlap, preferring sentence ends. */
 export function chunkText(text: string, chunkSize = 1200, overlap = 200, maxChunks = 5000): string[] {
   const clean = text.replace(/\s+/g, ' ').trim();
@@ -86,10 +97,10 @@ export function toChunks(extraction: Pick<Extraction, 'units' | 'format'>): Chun
   for (const u of extraction.units) {
     for (const text of chunkText(u.text)) {
       out.push({
-        text: u.sheet ? `Sheet: ${u.sheet}\n${text}` : text,
+        text: cleanForDatabase(u.sheet ? `Sheet: ${u.sheet}\n${text}` : text),
         ...(u.page ? { page_number: u.page } : {}),
         ...(u.slide ? { slide_number: u.slide } : {}),
-        ...(u.sheet ? { sheet_name: u.sheet } : {}),
+        ...(u.sheet ? { sheet_name: cleanForDatabase(u.sheet) } : {}),
         format: extraction.format,
       });
     }

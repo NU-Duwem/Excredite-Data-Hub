@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import * as XLSX from 'xlsx';
-import { UnsupportedFormatError, chunkText, extractDocument, fileExtension, isSupported, toChunks } from '../extractText';
+import { UnsupportedFormatError, chunkText, cleanForDatabase, extractDocument, fileExtension, isSupported, toChunks } from '../extractText';
 
 /** A PDF whose pages hold the given text; '' makes a blank page (like a scanned image page). */
 async function makePdf(pageTexts: string[]): Promise<Buffer> {
@@ -43,6 +43,23 @@ describe('file types', () => {
   it('explains old Office formats instead of guessing', async () => {
     await expect(extractDocument(Buffer.from('x'), 'memo.doc')).rejects.toBeInstanceOf(UnsupportedFormatError);
     await expect(extractDocument(Buffer.from('x'), 'memo.doc')).rejects.toThrow('save as .docx');
+  });
+});
+
+describe('cleanForDatabase', () => {
+  it('removes characters the database rejects', () => {
+    expect(cleanForDatabase('a\u0000b\u0007c\td\ne')).toBe('a b c\td\ne');
+    expect(cleanForDatabase('ok \uD83D\uDE00 emoji')).toBe('ok \uD83D\uDE00 emoji');
+    expect(cleanForDatabase('cut \uD83D')).toBe('cut ');
+    expect(cleanForDatabase('\uDE00 cut')).toBe(' cut');
+  });
+
+  it('makes chunks that survive JSON and Postgres', () => {
+    const text = 'x'.repeat(1199) + '\uD83D\uDE00' + ' more\u0000text'.repeat(200);
+    for (const c of toChunks({ units: [{ text }], format: 'PDF' })) {
+      expect(c.text).not.toMatch(/\u0000/);
+      expect(c.text.isWellFormed()).toBe(true);
+    }
   });
 });
 

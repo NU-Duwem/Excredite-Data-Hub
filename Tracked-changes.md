@@ -16,8 +16,28 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Sign-in page: logo reads "Excredite", not "E Excredite"
+**Branch:** `dev` · **PR:** not yet · **Status:** Open
+
+**What and why:** The orange three-bar icon is the "E" of the Excredite logo. On the sign-in page's green panel it was followed by the full word "Excredite", so it read "E Excredite".
+
+**Changes:**
+- **Sign-in page:** the panel now shows the mark followed by "xcredite" in white, and the amber full stop, matching the logo. Screen readers still hear "Excredite".
+- **Clean mark:** new `public/excredite-e.png`, cut from the full-resolution logo. The old `excredite-mark.png` has slivers of the "x" at its edge. The collapsed sidebar now uses the clean mark too.
+
+**Files:** `frontend/app/login/page.tsx`, `frontend/app/components/Sidebar.tsx`, `frontend/public/excredite-e.png` (new), `Tracked-changes.md`.
+
+**Manual steps:** None.
+
+**Testing:**
+- Screenshot of the sign-in page at desktop width: it reads "Excredite.".
+- The accessible label "Excredite" is present.
+- TypeScript is clean.
+
+---
+
 ## 2026-11-19 · Excredite logo as the site icon (favicon)
-**Branch:** `dev` · **PR:** #22 · **Status:** Open
+**Branch:** `dev` · **PR:** #22 · **Status:** Merged
 
 **What and why:** The browser tab still showed Next.js's default icon (a black triangle). As requested, the site icon is now the Excredite logo mark: the orange "E" of three bars.
 

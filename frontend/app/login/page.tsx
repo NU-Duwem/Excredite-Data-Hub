@@ -191,13 +191,15 @@ function LoginForm() {
         <div aria-hidden="true" className="absolute -right-24 -bottom-24 h-96 w-96 rounded-full bg-white/[0.04]" />
         <div aria-hidden="true" className="absolute left-12 bottom-28 h-1 w-16 rounded-full bg-accent" />
         <div aria-hidden="true" className="absolute -right-10 top-24 h-40 w-40 rounded-full border-[18px] border-white/5" />
-        <div className="relative flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/excredite-mark.png" alt="" width={44} height={44} className="h-11 w-11 rounded-xl bg-white p-1" />
-          <div className="leading-tight">
-            <p className="text-lg font-extrabold tracking-tight">Excredite</p>
-            <p className="text-sm text-white/70">Electricity Data Hub</p>
-          </div>
+        <div className="relative">
+          {/* The orange mark is the logo's "E", so the name continues with "xcredite". */}
+          <p className="flex items-end gap-1 leading-none" aria-label="Excredite">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/excredite-e.png" alt="" width={34} height={32} className="h-8 w-auto mb-[1px]" />
+            <span aria-hidden="true" className="text-[34px] font-extrabold tracking-tight">xcredite</span>
+            <span aria-hidden="true" className="mb-[4px] h-[7px] w-[7px] rounded-full bg-accent" />
+          </p>
+          <p className="mt-2 text-sm text-white/70">Electricity Data Hub</p>
         </div>
 
         <div className="relative max-w-md">

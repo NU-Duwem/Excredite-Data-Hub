@@ -163,6 +163,9 @@ export default function MattersPage() {
   const [jobDraft, setJobDraft] = useState<(JobDraft & { id?: string }) | null>(null);
   const [jobError, setJobError] = useState('');
   const [saving, setSaving] = useState(false);
+  // Deleting from the board: one task (its card's bin button) or every task shown in a column ("Clear").
+  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; title: string; column?: TaskStatus } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
 
@@ -303,6 +306,29 @@ export default function MattersPage() {
     setTasks((prev) => prev.filter((t) => t.id !== taskDraft.id));
     setTaskDraft(null);
     setStatus({ kind: 'ok', text: 'Task deleted.' });
+  };
+
+  const deleteTasks = async (ids: string[]) => {
+    setDeleting(true);
+    const gone = new Set<string>();
+    let failure: string | null = null;
+    // In batches, to keep each request short.
+    for (let i = 0; i < ids.length && !failure; i += 100) {
+      const { data, error } = await supabase.from('matter_tasks').delete().in('id', ids.slice(i, i + 100)).select('id');
+      if (error) failure = error.message;
+      for (const row of data ?? []) gone.add(row.id as string);
+    }
+    setDeleting(false);
+    setPendingDelete(null);
+    setTasks((prev) => prev.filter((t) => !gone.has(t.id)));
+    if (failure) {
+      setStatus({ kind: 'error', text: `Couldn’t delete ${gone.size ? 'all of them' : 'the task'}: ${failure}` });
+    } else if (gone.size < ids.length) {
+      // The database deletes only what this person may delete; it doesn't report the rest as an error.
+      setStatus({ kind: 'error', text: `${gone.size} of ${ids.length} deleted. You don’t have permission to delete the others.` });
+    } else {
+      setStatus({ kind: 'ok', text: gone.size === 1 ? 'Task deleted.' : `${gone.size} tasks deleted.` });
+    }
   };
 
   const moveTask = async (id: string, to: TaskStatus) => {
@@ -593,10 +619,22 @@ export default function MattersPage() {
                 }}
                 className={`rounded-2xl p-2.5 flex flex-col gap-2 transition-colors ${dragOver === s ? 'bg-brand/15 ring-2 ring-brand/40' : 'bg-[#e4e8e1]'}`}
               >
-                <h2 className="px-1.5 pt-1 flex justify-between text-[13px] font-extrabold text-gray-900">
-                  <span>{TASK_STATUS_LABELS[s]}</span>
-                  <span className="font-mono font-medium text-gray-700">{columns[s].length}</span>
-                </h2>
+                <div className="px-1.5 pt-1 min-h-9 flex items-center justify-between gap-2">
+                  <h2 className="text-[13px] font-extrabold text-gray-900">{TASK_STATUS_LABELS[s]}</h2>
+                  <span className="flex items-center gap-2">
+                    <span className="font-mono text-[13px] font-medium text-gray-700">{columns[s].length}</span>
+                    {canWorkTasks && columns[s].length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete({ ids: columns[s].map((t) => t.id), title: TASK_STATUS_LABELS[s], column: s })}
+                        aria-label={`Clear all ${columns[s].length} tasks in ${TASK_STATUS_LABELS[s]}`}
+                        className="min-h-8 px-2 rounded-lg text-xs font-semibold text-red-700 hover:bg-red-50"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </span>
+                </div>
                 {/* Long columns scroll inside themselves, with a visible scroll bar, so "+ Add task" stays in view. */}
                 <ul className="scroll-panel scroll-panel-strong flex flex-col gap-2 max-h-[min(60vh,640px)] -mr-1.5 pr-0.5" aria-label={TASK_STATUS_LABELS[s]}>
                   {columns[s].map((t) => {
@@ -604,7 +642,7 @@ export default function MattersPage() {
                     const late = isOverdue(t, today);
                     const when = dateRange(t.start, t.due, year);
                     return (
-                      <li key={t.id}>
+                      <li key={t.id} className="relative group">
                         <button
                           type="button"
                           draggable={canWorkTasks}
@@ -613,7 +651,7 @@ export default function MattersPage() {
                             e.dataTransfer.effectAllowed = 'move';
                           }}
                           onClick={() => openTask(t)}
-                          className="w-full text-left bg-white rounded-[14px] p-3 flex flex-col gap-2 shadow-[0_1px_2px_rgba(20,32,26,0.06)] hover:shadow-md transition-shadow"
+                          className={`w-full text-left bg-white rounded-[14px] p-3 ${canWorkTasks ? 'pr-11' : ''} flex flex-col gap-2 shadow-[0_1px_2px_rgba(20,32,26,0.06)] hover:shadow-md transition-shadow`}
                         >
                           {!selectedJobId && job && (
                             <span className={`${chipBase} self-start bg-brand/10 text-brand max-w-full truncate`}>{job.ref || job.title}</span>
@@ -628,6 +666,19 @@ export default function MattersPage() {
                             )}
                           </span>
                         </button>
+                        {canWorkTasks && (
+                          <button
+                            type="button"
+                            onClick={() => setPendingDelete({ ids: [t.id], title: t.title })}
+                            aria-label={`Delete task: ${t.title}`}
+                            title="Delete task"
+                            className="absolute top-2 right-2 h-8 w-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-700 hover:bg-red-50 focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
                       </li>
                     );
                   })}
@@ -647,6 +698,33 @@ export default function MattersPage() {
         )}
       </div>
 
+      {pendingDelete && (
+        <Modal title={pendingDelete.column ? `Clear ${pendingDelete.title}?` : 'Delete this task?'} onClose={() => !deleting && setPendingDelete(null)}>
+          <div className="px-6 pb-6 pt-3 flex flex-col gap-4">
+            <p className="text-sm text-gray-700">
+              {pendingDelete.column ? (
+                <>
+                  This deletes {pendingDelete.ids.length === 1 ? 'the 1 task' : `all ${pendingDelete.ids.length} tasks`} shown in <strong>{pendingDelete.title}</strong>, for everyone.
+                  {(selectedJobId !== null || who !== 'everyone' || due !== 'any') && ' Only tasks that match your current filters are deleted; tasks hidden by the filters are kept.'}
+                </>
+              ) : (
+                <>
+                  <strong>{pendingDelete.title}</strong> will be deleted for everyone.
+                </>
+              )}{' '}
+              This can’t be undone.
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => setPendingDelete(null)} disabled={deleting} className="min-h-11 px-4 rounded-xl border border-gray-200 text-sm font-semibold text-gray-900 hover:bg-gray-50">
+                Keep {pendingDelete.ids.length === 1 ? 'it' : 'them'}
+              </button>
+              <button type="button" onClick={() => void deleteTasks(pendingDelete.ids)} disabled={deleting} className="min-h-11 px-4 rounded-xl bg-red-700 text-white text-sm font-semibold hover:bg-red-800 disabled:opacity-60">
+                {deleting ? 'Deleting…' : pendingDelete.ids.length === 1 ? 'Delete task' : `Delete ${pendingDelete.ids.length} tasks`}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {taskDraft && (
         <Modal title={taskDraft.id ? (canWorkTasks ? 'Edit task' : 'Task') : 'Add task'} onClose={() => setTaskDraft(null)}>
           <form

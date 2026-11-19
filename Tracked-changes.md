@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Failed documents visible to admins only
-**Branch:** `dev` · **PR:** not yet · **Status:** Open
+**Branch:** `dev` · **PR:** #20 · **Status:** Open
 
 **What and why:** As requested, documents whose processing failed are now visible to System Admins only.
 

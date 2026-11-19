@@ -450,7 +450,7 @@ export default function MattersPage() {
   })();
 
   return (
-    <main className="flex-1 min-w-0 p-4 sm:p-6">
+    <main className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 sm:p-6">
       <div className="max-w-[1500px] mx-auto flex flex-col gap-4">
         <header className="flex flex-wrap items-center gap-2.5">
           <h1 className="mr-2 text-2xl font-extrabold tracking-tight text-gray-900">Regulatory &amp; Advisory</h1>
@@ -597,7 +597,8 @@ export default function MattersPage() {
                   <span>{TASK_STATUS_LABELS[s]}</span>
                   <span className="font-mono font-medium text-gray-700">{columns[s].length}</span>
                 </h2>
-                <ul className="flex flex-col gap-2" aria-label={TASK_STATUS_LABELS[s]}>
+                {/* Long columns scroll inside themselves, with a visible scroll bar, so "+ Add task" stays in view. */}
+                <ul className="scroll-panel scroll-panel-strong flex flex-col gap-2 max-h-[min(60vh,640px)] -mr-1.5 pr-0.5" aria-label={TASK_STATUS_LABELS[s]}>
                   {columns[s].map((t) => {
                     const job = jobs.find((j) => j.id === t.matterId);
                     const late = isOverdue(t, today);

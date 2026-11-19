@@ -16,8 +16,32 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Regulatory & Advisory: task columns scroll
+**Branch:** `dev` · **PR:** #25 · **Status:** Open
+
+**What and why:** As requested, the To-Do list on the Regulatory & Advisory task board needed a scroll bar. Unlike the other pages, this page wasn't allowed to scroll, so tasks below the bottom of the screen were cut off and couldn't be reached.
+
+**Changes:**
+- **Columns:** each column's task list (To do, In progress, In review, Done) now scrolls inside itself once it's taller than about 60% of the screen. It has a slim scroll bar that stays visible, including on Macs, so the "+ Add task" button stays in view.
+- **Page:** the page itself now scrolls too, when the job cards and job details take up more than the screen.
+- **Styles:** a new `scroll-panel-strong` style in `globals.css` gives the scroll bar a darker thumb, so it shows against the column's tinted background.
+
+**Files:** `frontend/app/matters/page.tsx`, `frontend/app/globals.css`, `Tracked-changes.md`.
+
+**Manual steps:** None.
+
+**Testing:**
+- Browser check against fake data with 18 to-do tasks, at 1440×900:
+  - the To-do list is 540 px tall, with 2,737 px of content, and scrolls;
+  - "+ Add task" stays on screen;
+  - the last task can be reached by scrolling;
+  - with scroll bars switched on in the test browser, the bar is visible.
+- TypeScript is clean, and there are no new lint errors.
+
+---
+
 ## 2026-11-19 · Sample matters: "B. Ekpo" is Eyo Ekpo; placeholder "J. Doe" removed
-**Branch:** `dev` · **PR:** #24 · **Status:** Open
+**Branch:** `dev` · **PR:** #24 · **Status:** Merged
 
 **What and why:** The name rule (`24_names_without_titles.sql`) leaves single letters alone, because they're usually initials. But the "B." in the lead counsel "B. Ekpo" stood for Barrister. Both entries come from the dummy sample matters in `05_db_updates.sql`.
 
@@ -38,7 +62,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Users' names without titles (Mr, Mrs, Dr, Barr, Engr, …)
-**Branch:** `dev` · **PR:** #24 · **Status:** Open
+**Branch:** `dev` · **PR:** #24 · **Status:** Merged
 
 **What and why:** As requested, the site's users are named without titles.
 

@@ -16,8 +16,27 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Add the missing documents.file_hash column
+**Branch:** `dev` · **PR:** #16 · **Status:** Open
+
+**What and why:** The first real test import (5 files) failed on every file with "column documents.file_hash does not exist". The import tool uses this column to skip files that are already in the library. `06_document_embeddings_setup.sql` was meant to add it, but the live database had every other column from that file except this one. Nothing was saved by the failed run: the check happens before anything is written.
+
+**Changes:**
+- New `22_document_file_hash.sql` adds `documents.file_hash` and its index (safe to run more than once).
+- README SQL run order: new row 23.
+
+**Files:** `22_document_file_hash.sql`, `README.md`, `Tracked-changes.md`.
+
+**Manual steps:** None. Already applied to the live database (project `bwxgqnagsuujigacgfes`). For any other database, run `22_document_file_hash.sql`.
+
+**Testing:**
+- Confirmed on the live database that the column and the `documents_file_hash_idx` index now exist.
+- Supabase security advisor: no new findings (only the existing "leaked password protection" warning).
+
+---
+
 ## 2026-11-19 · Import tool reads .env as well as .env.local
-**Branch:** `dev` · **PR:** #15 · **Status:** Open
+**Branch:** `dev` · **PR:** #15 · **Status:** Merged
 
 **What and why:** Your first real test import stopped with "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set", although both were set. They were in `frontend/.env`, which the website reads but the import tool didn't.
 

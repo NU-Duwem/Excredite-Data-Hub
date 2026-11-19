@@ -3,6 +3,8 @@
  *
  *   npm run import-docs -- <folder> --dry-run          # measure only, nothing sent
  *   npm run import-docs -- <folder> --limit 5          # import the first 5 files
+ *   npm run import-docs -- <folder> --text-only --skip-spreadsheets
+ *   npm run import-docs -- <folder> --add-originals    # later: attach the original files
  *   npm run import-docs -- --help
  *
  * For each supported file (PDF, Word .docx, PowerPoint .pptx, Excel, CSV, text):
@@ -28,6 +30,7 @@ import {
   formatBytes,
   formatDuration,
   guessDocumentType,
+  isSpreadsheet,
   parseArgs,
   storagePath,
   titleFromFileName,
@@ -37,7 +40,20 @@ import {
 const STORAGE_FILE_LIMIT = 50 * 1024 * 1024; // the documents bucket's per-file limit
 const SKIP_DIRS = new Set(['node_modules', '.git', '__MACOSX']);
 
-type Outcome = 'imported' | 'would-import' | 'already-imported' | 'needs-ocr' | 'unsupported' | 'failed';
+type Outcome =
+  | 'imported'
+  | 'would-import'
+  | 'already-imported'
+  | 'needs-ocr'
+  | 'unsupported'
+  | 'skipped'
+  | 'failed'
+  // --add-originals
+  | 'attached'
+  | 'would-attach'
+  | 'has-original'
+  | 'not-in-library'
+  | 'too-large';
 
 type FileResult = {
   path: string;
@@ -93,6 +109,7 @@ async function importOne(db: SupabaseClient, opts: ImportOptions, root: string, 
   const result: FileResult = { path: rel, outcome: 'failed', bytes: size };
 
   if (!isSupported(name)) return { ...result, outcome: 'unsupported', note: unsupportedReason(name) };
+  if (opts.skipSpreadsheets && isSpreadsheet(name)) return { ...result, outcome: 'skipped', note: 'Spreadsheet left out (--skip-spreadsheets)' };
 
   const buffer = await readFile(path);
   const hash = createHash('sha256').update(buffer).digest('hex');
@@ -202,13 +219,58 @@ async function importOne(db: SupabaseClient, opts: ImportOptions, root: string, 
   return { ...result, outcome: 'imported', originalUploaded: !!s3Key, note: notes ?? undefined, ms: Date.now() - started };
 }
 
+/**
+ * --add-originals: for a file whose text is already in the library (matched by
+ * content, so moved or renamed files still match) but whose original was not
+ * stored, upload the original and attach it. Text and search are not touched.
+ */
+async function attachOne(db: SupabaseClient, opts: ImportOptions, root: string, path: string, seen: Seen): Promise<FileResult> {
+  const started = Date.now();
+  const rel = relative(root, path) || basename(path);
+  const name = basename(path);
+  const { size } = await stat(path);
+  const result: FileResult = { path: rel, outcome: 'failed', bytes: size };
+
+  if (!isSupported(name)) return { ...result, outcome: 'unsupported', note: unsupportedReason(name) };
+  const buffer = await readFile(path);
+  const hash = createHash('sha256').update(buffer).digest('hex');
+  const earlier = seen.get(hash);
+  if (earlier) return { ...result, outcome: 'has-original', note: `Same file as ${earlier}` };
+  seen.set(hash, rel);
+
+  const { data, error } = await db.from('documents').select('id, s3_key').eq('file_hash', hash).limit(1);
+  if (error) return { ...result, note: `Looking it up failed: ${error.message}` };
+  const doc = data?.[0];
+  if (!doc) return { ...result, outcome: 'not-in-library', note: 'Not imported yet: run a normal import for it.' };
+  result.documentId = doc.id as string;
+  if (doc.s3_key) return { ...result, outcome: 'has-original' };
+  if (size > STORAGE_FILE_LIMIT) return { ...result, outcome: 'too-large', note: `Larger than ${formatBytes(STORAGE_FILE_LIMIT)}, the storage limit per file.` };
+  if (opts.dryRun) return { ...result, outcome: 'would-attach', ms: Date.now() - started };
+
+  const key = storagePath(hash, name);
+  const { error: upErr } = await db.storage.from('documents').upload(key, buffer, { upsert: true, contentType: 'application/octet-stream' });
+  if (upErr) return { ...result, note: `Upload failed: ${upErr.message}` };
+  const { error: updErr } = await db.from('documents').update({ s3_key: key, file_size_bytes: size > 0 ? size : null }).eq('id', doc.id).is('s3_key', null);
+  if (updErr) {
+    await db.storage.from('documents').remove([key]);
+    return { ...result, note: `Could not attach it: ${updErr.message}` };
+  }
+  return { ...result, outcome: 'attached', originalUploaded: true, ms: Date.now() - started };
+}
+
 const LABEL: Record<Outcome, string> = {
   imported: 'imported',
   'would-import': 'ready',
   'already-imported': 'already in library',
   'needs-ocr': 'needs OCR',
   unsupported: 'unsupported',
+  skipped: 'left out',
   failed: 'FAILED',
+  attached: 'original added',
+  'would-attach': 'original to add',
+  'has-original': 'already has original',
+  'not-in-library': 'not in library',
+  'too-large': 'too large to store',
 };
 
 async function main() {
@@ -227,7 +289,11 @@ async function main() {
   loadEnvFile(resolve('.env.local'));
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!opts.dryRun && (!url || !key)) {
+  if ((!opts.dryRun || opts.addOriginals) && (!url || !key)) {
+    if (opts.addOriginals) {
+      console.error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (in frontend/.env.local): --add-originals looks documents up in the library, even with --dry-run.');
+      process.exit(2);
+    }
     console.error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (in frontend/.env.local) to import. Use --dry-run to measure without them.');
     process.exit(2);
   }
@@ -241,8 +307,13 @@ async function main() {
   const all = (await listFiles(root)).sort((a, b) => a.localeCompare(b));
   const files = opts.limit ? all.slice(0, opts.limit) : all;
 
-  console.log(`${opts.dryRun ? 'DRY RUN (nothing will be uploaded or saved)' : 'IMPORT'}: ${files.length} of ${all.length} file(s) in ${root}`);
-  console.log(`Classification ${opts.classification}${opts.restricted ? ', restricted' : ''}; ${opts.textOnly ? 'text only' : 'originals uploaded'}; type ${opts.type ?? 'guessed from name'}\n`);
+  const mode = opts.addOriginals ? 'ADD ORIGINALS' : 'IMPORT';
+  console.log(`${opts.dryRun ? `DRY RUN of ${mode} (nothing will be uploaded or saved)` : mode}: ${files.length} of ${all.length} file(s) in ${root}`);
+  if (opts.addOriginals) console.log('Uploading original files for documents already in the library that have none.\n');
+  else
+    console.log(
+      `Classification ${opts.classification}${opts.restricted ? ', restricted' : ''}; ${opts.textOnly ? 'text only' : 'originals uploaded'}; ${opts.skipSpreadsheets ? 'spreadsheets left out; ' : ''}type ${opts.type ?? 'guessed from name'}\n`,
+    );
 
   const started = Date.now();
   const results: FileResult[] = [];
@@ -250,7 +321,7 @@ async function main() {
   for (const [i, path] of files.entries()) {
     let r: FileResult;
     try {
-      r = await importOne(db, opts, root, path, seen);
+      r = opts.addOriginals ? await attachOne(db, opts, root, path, seen) : await importOne(db, opts, root, path, seen);
     } catch (err) {
       r = { path: relative(root, path), outcome: 'failed', bytes: 0, note: err instanceof Error ? err.message : String(err) };
     }
@@ -272,6 +343,30 @@ async function main() {
   const scannedPages = results.reduce((n, r) => n + (r.emptyPages ?? 0), 0);
   const elapsed = Date.now() - started;
 
+  if (opts.addOriginals) {
+    const toAdd = results.filter((r) => r.outcome === 'attached' || r.outcome === 'would-attach');
+    const s2 = {
+      mode: opts.dryRun ? 'dry-run (add originals)' : 'add originals',
+      folder: root,
+      files_considered: files.length,
+      [opts.dryRun ? 'originals_to_add' : 'originals_added']: toAdd.length,
+      already_have_original: count('has-original'),
+      not_in_library: count('not-in-library'),
+      too_large_to_store: count('too-large'),
+      unsupported: count('unsupported'),
+      failed: count('failed'),
+      storage_space: formatBytes(toAdd.reduce((n, r) => n + r.bytes, 0)),
+      time_taken: formatDuration(Date.now() - started),
+    };
+    console.log('\nSummary');
+    for (const [k, v] of Object.entries(s2)) console.log(`  ${k.replace(/_/g, ' ').padEnd(26)} ${v}`);
+    const rp = resolve(opts.report ?? `add-originals-report-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+    writeFileSync(rp, JSON.stringify({ summary: s2, options: { ...opts }, files: results }, null, 2));
+    console.log(`\nReport: ${rp}`);
+    if (count('failed') > 0) process.exitCode = 1;
+    return;
+  }
+
   const summary = {
     mode: opts.dryRun ? 'dry-run' : 'import',
     folder: root,
@@ -281,6 +376,7 @@ async function main() {
     already_imported: count('already-imported'),
     needs_ocr: count('needs-ocr'),
     unsupported: count('unsupported'),
+    spreadsheets_left_out: count('skipped'),
     failed: count('failed'),
     pages_without_text: scannedPages,
     chunks,

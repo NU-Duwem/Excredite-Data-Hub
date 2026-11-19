@@ -240,6 +240,8 @@ Run this on the computer that holds the documents. Run it from `frontend/`, with
 | `--type X` | The document type for every file. By default it's guessed from the file name |
 | `--restricted` | Mark the imported documents Restricted |
 | `--text-only` | Don't upload the original files. This saves storage, but the library can't show or download them |
+| `--skip-spreadsheets` | Leave out spreadsheets (`.xlsx`, `.xls`, `.xlsm`, `.csv`). Raw data tables use a lot of database space and add little to search |
+| `--add-originals` | Later, after a `--text-only` import (for example on a bigger Supabase plan): upload the original files for documents already in the library, matched by content, so moved or renamed files still match. Text and search are unchanged. Add `--dry-run` to see what would be uploaded |
 | `--uploaded-by EMAIL` | Recorded as the uploader (default `bulk-import`) |
 | `--report FILE` | Where to write the JSON report |
 | `--help` | Show help |

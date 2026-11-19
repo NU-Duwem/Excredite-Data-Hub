@@ -16,8 +16,42 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Import tool: leave out spreadsheets; add originals later
+**Branch:** `dev` · **PR:** none yet · **Status:** Open
+
+**What and why:** The dry run of "Eyo Ekpo – Documents" (2,672 files) found:
+- 1,863 files ready, making about 80,000 passages, an estimated 395 MB of database space and 2.1 GB of originals;
+- 26,000 of those passages come from spreadsheets, mostly raw data tables such as meter readings, a travel list and a membership list.
+
+You chose to stay on the Supabase Free plan (500 MB database, 1 GB storage) and import text only. You also asked whether the originals could be added later on Pro. As the tool stood, a later run would have skipped every text-only document as "already imported", so the originals could never have been added.
+
+**Changes:**
+- **`--skip-spreadsheets`:** leaves out `.xlsx`, `.xls`, `.xlsm` and `.csv` files. They're counted as "spreadsheets left out" in the summary and report. This cuts the estimate for this folder to roughly 265 MB.
+- **`--add-originals`:** for each file, finds the library document with the same content fingerprint, uploads the original and attaches it to that document.
+  - Text, search and citations are unchanged.
+  - Moved or renamed files still match.
+  - Files not yet imported are reported, not imported.
+  - Files over the 50 MB per-file limit are reported, and nothing is uploaded twice.
+  - Works with `--dry-run` to preview, and can't be combined with `--text-only`.
+  - Writes an `add-originals-report-….json` report.
+- **README:** the bulk-import options table lists both options.
+
+**Files:** `frontend/scripts/import-documents.ts`, `frontend/utils/importPlan.ts`, `frontend/utils/__tests__/importPlan.test.ts`, `README.md`, `Tracked-changes.md`.
+
+**Manual steps:** none.
+
+**Testing:**
+- **Unit tests:** new tests for the options, the clash with `--text-only`, and spreadsheet detection.
+- **End to end:** four real runs on a small test folder against a fake Supabase:
+  1. A text-only import without spreadsheets: 2 imported, the spreadsheet left out, the duplicate copy skipped, and no originals stored.
+  2. A preview of adding originals: 2 to add.
+  3. Adding originals: 2 uploaded and attached.
+  4. Running it again: 0 added.
+
+---
+
 ## 2026-11-18 · Drafting Desk replaces the document generator
-**Branch:** `dev` · **PR:** #13 · **Status:** Open
+**Branch:** `dev` · **PR:** #13 · **Status:** Merged
 
 **What and why:** You asked for the researched "Drafting Desk" design to be built. The old "Generate a document" page wasn't real:
 - whatever you asked for, it waited 6 seconds and showed the same template with made-up figures ("4,350 MW", "78.5%");

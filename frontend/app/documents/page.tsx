@@ -1531,11 +1531,6 @@ function DocumentsContent() {
                                 const sections = passagesToSections(docChunks);
                                 return (
                                   <div className="w-full h-[540px] flex flex-col bg-white border border-gray-200 rounded-xl overflow-hidden">
-                                    {!selectedDoc.s3_key && (
-                                      <div className="px-5 py-2.5 text-[11px] text-gray-600 bg-gray-50 border-b border-gray-200">
-                                        Text only: the original file wasn&apos;t stored, so this shows the text the AI reads. Layout, images and tables aren&apos;t shown.
-                                      </div>
-                                    )}
                                     <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
                                       {sections.length === 0 ? (
                                         <p className="text-xs text-gray-400 text-center py-12">

@@ -16,8 +16,30 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Excredite logo as the site icon (favicon)
+**Branch:** `dev` · **PR:** #22 · **Status:** Open
+
+**What and why:** The browser tab still showed Next.js's default icon (a black triangle). As requested, the site icon is now the Excredite logo mark: the orange "E" of three bars.
+
+**Changes:**
+- The mark was cut cleanly from the full-resolution `public/Excredite_logo.png`, on a transparent background. The small `excredite-mark.png` has slivers of the "x" at its edge, so it wasn't used.
+- `app/favicon.ico` was replaced, with sizes 16, 32, 48 and 256 px.
+- New `app/icon.png` (512 px), for browsers that prefer a PNG.
+- New `app/apple-icon.png` (180 px, on white), for phone home screens.
+- Next.js adds the matching `<link>` tags to every page by itself, so no code changed.
+
+**Files:** `frontend/app/favicon.ico`, `frontend/app/icon.png` (new), `frontend/app/apple-icon.png` (new), `Tracked-changes.md`.
+
+**Manual steps:** None. After deploying, browsers may keep showing the old icon until their cache clears; a hard refresh (Ctrl+Shift+R) usually fixes it.
+
+**Testing:**
+- Checked the icons at tab size on light and dark backgrounds.
+- Dev server: the page header links all three icons, and each is served (200, with the right type) without signing in.
+
+---
+
 ## 2026-11-19 · Remove the "Text only" note from the document preview
-**Branch:** `dev` · **PR:** #21 · **Status:** Open
+**Branch:** `dev` · **PR:** #21 · **Status:** Merged
 
 **What and why:** As requested, the note above text-only previews ("Text only: the original file wasn't stored, so this shows the text the AI reads. Layout, images and tables aren't shown.") is removed. The preview now shows the document text straight away.
 

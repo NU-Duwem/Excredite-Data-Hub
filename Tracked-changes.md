@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Remove the "Text only" note from the document preview
-**Branch:** `dev` · **PR:** not yet · **Status:** Open
+**Branch:** `dev` · **PR:** #21 · **Status:** Open
 
 **What and why:** As requested, the note above text-only previews ("Text only: the original file wasn't stored, so this shows the text the AI reads. Layout, images and tables aren't shown.") is removed. The preview now shows the document text straight away.
 

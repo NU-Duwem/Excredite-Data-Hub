@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · "Extracted AI Index" tab for admins only
-**Branch:** `dev` · **PR:** not yet · **Status:** Open
+**Branch:** `dev` · **PR:** #19 · **Status:** Open
 
 **What and why:** As requested, the **Extracted AI Index** tab in the document workspace (the raw passages the AI searches, with their page numbers) is now shown only to System Admins (`power_admin`). Everyone else sees the document preview alone, without the tab bar.
 
@@ -34,7 +34,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Document preview for text-only documents; library shows every document
-**Branch:** `dev` · **PR:** not yet · **Status:** Open
+**Branch:** `dev` · **PR:** #19 · **Status:** Open
 
 **What and why:** After the import, the document preview stopped working. Two causes:
 - **Empty preview:** the page loaded a document's text only when its original file was stored. Every imported document is text only, so the preview was blank.

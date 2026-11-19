@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Regulatory & Advisory: delete tasks from the board, or clear a column
-**Branch:** `dev` · **PR:** not yet · **Status:** Open
+**Branch:** `dev` · **PR:** #26 · **Status:** Open
 
 **What and why:** As requested, tasks on the Regulatory & Advisory board can be deleted one at a time, or a whole list can be cleared. Before, the only way was to open a task and choose Delete inside it.
 

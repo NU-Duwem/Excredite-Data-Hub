@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Import tool: clean text before saving; re-runs replace failed attempts
-**Branch:** `dev` · **PR:** not yet · **Status:** Open
+**Branch:** `dev` · **PR:** #18 · **Status:** Open
 
 **What and why:** The full import of "Eyo Ekpo – Documents" finished in 5 hours:
 - **Imported:** 1,674 files and 52,985 passages, about 242 MB of the 500 MB Free-plan database.

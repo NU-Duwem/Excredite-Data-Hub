@@ -1444,7 +1444,8 @@ function DocumentsContent() {
                           </div>
                         </div>
 
-                        {/* Workspace Tab Bar: Visual Document Preview vs Extracted AI Chunks */}
+                        {/* Workspace Tab Bar: Visual Document Preview vs Extracted AI Chunks (admins only) */}
+                        {isAdmin && (
                         <div className="flex border-b border-gray-200 gap-6 pt-1">
                           <button
                             onClick={() => setViewerTab('preview')}
@@ -1465,9 +1466,10 @@ function DocumentsContent() {
                             Extracted AI Index ({docChunks.length})
                           </button>
                         </div>
+                        )}
 
-                        {/* TAB 1: VISUAL DOCUMENT PREVIEW */}
-                        {viewerTab === 'preview' && (
+                        {/* TAB 1: VISUAL DOCUMENT PREVIEW (the only view for non-admins) */}
+                        {(viewerTab === 'preview' || !isAdmin) && (
                           <div className="w-full min-h-[520px] bg-gray-100/70 rounded-xl overflow-hidden border border-gray-200 shadow-inner flex flex-col justify-center items-center">
                             {selectedDoc ? (
                               (() => {
@@ -1552,8 +1554,8 @@ function DocumentsContent() {
                           </div>
                         )}
 
-                        {/* TAB 2: EXTRACTED AI CHUNKS */}
-                        {viewerTab === 'chunks' && (
+                        {/* TAB 2: EXTRACTED AI CHUNKS (admins only) */}
+                        {isAdmin && viewerTab === 'chunks' && (
                           <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 max-h-[500px] overflow-y-auto">
                             <div className="flex justify-between items-center pb-3 border-b border-gray-100">
                               <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide">Extracted Document Text Chunks</h4>

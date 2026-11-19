@@ -16,6 +16,23 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · "Extracted AI Index" tab for admins only
+**Branch:** `dev` · **PR:** not yet · **Status:** Open
+
+**What and why:** As requested, the **Extracted AI Index** tab in the document workspace (the raw passages the AI searches, with their page numbers) is now shown only to System Admins (`power_admin`). Everyone else sees the document preview alone, without the tab bar.
+
+**Note:** This hides the tab; it doesn't change database access. Staff who can see a document can still read its text through the preview, and the AI uses the passages to answer them.
+
+**Files:** `frontend/app/documents/page.tsx`, `Tracked-changes.md`.
+
+**Manual steps:** None (restart or redeploy the website).
+
+**Testing:**
+- TypeScript is clean, and there are no new lint errors.
+- Browser check against a fake Supabase: as an admin the tab shows; as an analyst it doesn't, and the preview still shows the document text.
+
+---
+
 ## 2026-11-19 · Document preview for text-only documents; library shows every document
 **Branch:** `dev` · **PR:** not yet · **Status:** Open
 

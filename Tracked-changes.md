@@ -21,7 +21,7 @@ This file records every change made to the project, newest first. It covers the 
 
 **What and why:** After the import, the document preview stopped working. Two causes:
 - **Empty preview:** the page loaded a document's text only when its original file was stored. Every imported document is text only, so the preview was blank.
-- **Short list:** the library asked for all documents in one request, but the database returns at most 1,000 rows per request. With 1,689 documents, the oldest 689 were missing from the list.
+- **Short list:** the library asked for all documents in one request, but the database returns at most 1,000 rows per request. With 1,688 documents, the oldest 688 were missing from the list.
 
 The re-run of the import loaded 3 more files: the two Akwa Ibom Summit PDFs and the NDPHC Rejoinder. "Annexure 2.Annual Report 2020" timed out while saving its 423 passages.
 

@@ -126,17 +126,32 @@ export function titleFromFileName(name: string): string {
   return (base || name).slice(0, 300);
 }
 
-/** Best guess at the document type from words in the file name or folder path. */
+const TYPE_RULES: [RegExp, string][] = [
+  [/tariff|myto|\bband [a-e]\b/, 'TARIFF_DETERMINATION'],
+  [/judg(e)?ment|ruling|court|tribunal|appeal/, 'COURT_JUDGMENT'],
+  // "regulations" (an instrument), not "regulation", which is in names such as "African School of Regulation".
+  [/\border\b|orders|\bregulations\b|directive|nerc[-_ ]?order/, 'REGULATORY_ORDER'],
+  [/policy|strategy|white ?paper/, 'POLICY_PAPER'],
+  [/report|statistic|bulletin|review|outlook/, 'MARKET_REPORT'],
+  [/brief|memo|opinion|advice|submission/, 'LEGAL_BRIEF'],
+  [/note|minutes/, 'DOCUMENT_NOTE'],
+];
+
+function typeFromWords(text: string): string | null {
+  const t = text.toLowerCase();
+  for (const [re, type] of TYPE_RULES) if (re.test(t)) return type;
+  return null;
+}
+
+/**
+ * Best guess at the document type. The file name decides first; the folder names
+ * are used only when the file name gives no hint, because folders are usually
+ * client or project names rather than document types.
+ */
 export function guessDocumentType(path: string): string {
-  const p = path.toLowerCase();
-  if (/tariff|myto|\bband [a-e]\b/.test(p)) return 'TARIFF_DETERMINATION';
-  if (/judg(e)?ment|ruling|court|tribunal|appeal/.test(p)) return 'COURT_JUDGMENT';
-  if (/\border\b|orders|regulation|directive|nerc[-_ ]?order/.test(p)) return 'REGULATORY_ORDER';
-  if (/policy|strategy|white ?paper/.test(p)) return 'POLICY_PAPER';
-  if (/report|statistic|bulletin|review|outlook/.test(p)) return 'MARKET_REPORT';
-  if (/brief|memo|opinion|advice|submission/.test(p)) return 'LEGAL_BRIEF';
-  if (/note|minutes/.test(p)) return 'DOCUMENT_NOTE';
-  return 'OTHER';
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  const fileName = parts.pop() ?? '';
+  return typeFromWords(fileName) ?? typeFromWords(parts.join(' / ')) ?? 'OTHER';
 }
 
 /** Storage path for an original file: grouped by content hash, with a safe file name. */

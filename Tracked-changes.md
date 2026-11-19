@@ -16,8 +16,29 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Import tool: file name decides the document type
+**Branch:** `dev` · **PR:** #17 · **Status:** Open
+
+**What and why:** The 5-file test import worked: 5 documents, 108 passages, all with search vectors, and search returns them for a signed-in staff member. But "Draft MOU" and "draft.Presentation to ASR Parties" were filed as **Regulatory order**, because their folder, "African School of Regulation", contains the word "regulation". In this collection, folders are mostly client or project names, not document types.
+
+**Changes:**
+- The type is guessed from the file name first; folder names are used only when the file name gives no hint.
+- "regulation" no longer counts as a regulatory order; "regulations" (an instrument, such as "Meter Reading Regulations 2024") still does.
+- The two documents from the test were corrected to **Other** in the live database.
+
+**Files:** `frontend/utils/importPlan.ts`, `frontend/utils/__tests__/importPlan.test.ts`, `Tracked-changes.md`.
+
+**Manual steps:** None. To bring the change to your computer before the full import, run `git pull` in the project folder.
+
+**Testing:**
+- Vitest: the import plan tests pass (11), including new cases for file name versus folder.
+- TypeScript is clean.
+- Live database: checked the 5 imported documents (text only, fingerprint saved, passages with vectors, page and slide numbers for the PDF and the slides), and ran the hybrid search as Taiwo.
+
+---
+
 ## 2026-11-19 · Add the missing documents.file_hash column
-**Branch:** `dev` · **PR:** #16 · **Status:** Open
+**Branch:** `dev` · **PR:** #16 · **Status:** Merged
 
 **What and why:** The first real test import (5 files) failed on every file with "column documents.file_hash does not exist". The import tool uses this column to skip files that are already in the library. `06_document_embeddings_setup.sql` was meant to add it, but the live database had every other column from that file except this one. Nothing was saved by the failed run: the check happens before anything is written.
 

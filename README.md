@@ -108,6 +108,7 @@ Run these files in the Supabase **SQL Editor**, in this order. Each one is safe 
 | 22 | `21_drafting.sql` | Drafting Desk: private autosaved drafts and shared workflows |
 | 23 | `22_document_file_hash.sql` | Adds `documents.file_hash` (if missing) so uploads and the import tool can skip duplicate files |
 | 24 | `23_failed_documents_admin_only.sql` | Documents whose processing failed are visible to System Admins only |
+| 25 | `24_names_without_titles.sql` | Users' names (and lead counsel) are saved without titles such as Mr, Mrs, Dr, Barr, Engr |
 
 **After running the SQL:**
 - Deploy the edge functions with the [Supabase CLI](https://supabase.com/docs/guides/cli):

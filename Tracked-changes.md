@@ -16,8 +16,63 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Sample matters: "B. Ekpo" is Eyo Ekpo; placeholder "J. Doe" removed
+**Branch:** `dev` · **PR:** #24 · **Status:** Open
+
+**What and why:** The name rule (`24_names_without_titles.sql`) leaves single letters alone, because they're usually initials. But the "B." in the lead counsel "B. Ekpo" stood for Barrister. Both entries come from the dummy sample matters in `05_db_updates.sql`.
+
+**Changes:**
+- **"DISCO Tariff Dispute case" (LIT/2025/08) and "Egbin Thermal Contractual Dispute" (APP/2026/01):** the lead is now Eyo Ekpo, linked to Eyo's staff account (`lead_user_id`), so the work board shows Eyo's name and photo.
+- **"Compliance audit matter" (REG/2025/12):** the placeholder lead "J. Doe" was cleared.
+- **`05_db_updates.sql`:** updated to match, so a fresh setup doesn't bring them back.
+
+**Files:** `05_db_updates.sql`, `Tracked-changes.md`.
+
+**Manual steps:** None. The live database was updated directly.
+
+**Testing:**
+- Live database: the two matters show "Eyo Ekpo", linked to the account.
+- The compliance matter has no lead.
+- No lead counsel or staff name in the database has a title or a placeholder.
+
+---
+
+## 2026-11-19 · Users' names without titles (Mr, Mrs, Dr, Barr, Engr, …)
+**Branch:** `dev` · **PR:** #24 · **Status:** Open
+
+**What and why:** As requested, the site's users are named without titles.
+
+**Search:** I searched the code, the SQL files, the docs and the live database: user profiles, sign-in records, matters' lead counsel, and every text column. The five staff names were already plain (Duwem Nwapi, Eyo Ekpo, Osefan Anegbe, Phillip Ekpo, Taiwo Odugbemi), and nothing in the code adds a title. To keep it that way, the database now removes titles whenever a user's name is saved.
+
+**Changes:**
+- **New `24_names_without_titles.sql`:**
+  - `private.remove_name_titles()` strips leading titles, including several in a row ("Dr. Mrs …"). It covers Mr, Mrs, Ms, Miss, Dr, Barr, Engr, Prof, Hon, Chief, Alhaji, Alhaja, Hajia, Rev, Pastor, Pharm, Arc, Sen, Sir, Dame, Madam, Comrade, Amb, His/Her Excellency and HE / H.E., in any case and with or without a full stop. It also strips a trailing "Esq." or ", SAN".
+  - Triggers on `user_profiles.full_name` and `matters.lead_counsel` apply it to every save. That covers names typed in the Admin Panel or on Profile & Settings, and the name Microsoft 365 sends at first sign-in.
+  - It also cleaned any names already stored, including the name in each sign-in record.
+- **Trigger permissions:** the trigger functions are SECURITY DEFINER, because a person editing their own name isn't allowed to call the rule directly. When the first version was applied without this, it briefly blocked people from editing their own names, for a few minutes, until the fix went in.
+- **README:** SQL run order row 25.
+
+**Files:** `24_names_without_titles.sql` (new), `README.md`, `Tracked-changes.md`.
+
+**Manual steps:** None. Already applied to the live database. For any other database, run `24_names_without_titles.sql`.
+
+**Testing:**
+- **Sample names, checked one by one:**
+  - "Barr. Osefan Anegbe" → "Osefan Anegbe";
+  - "Dr. Mrs Valerie Obot" → "Valerie Obot";
+  - "ENGR. TAIWO ODUGBEMI" → "TAIWO ODUGBEMI";
+  - "Eyo Ekpo, SAN" → "Eyo Ekpo".
+  - Unchanged: "Henry Okon", "Archibald Cole", "Sandra Obi" and the initials in "B. Ekpo".
+- **Live database, rolled back:**
+  - Osefan saving "Barr. Osefan Anegbe, Esq." as their own name stores "Osefan Anegbe";
+  - an admin edit of "Mr Eyo Ekpo" stores "Eyo Ekpo";
+  - a lead counsel of "Engr. Duwem Nwapi" stores "Duwem Nwapi".
+- **Security advisor:** no new findings.
+
+---
+
 ## 2026-11-19 · Sign-in page: logo reads "Excredite", not "E Excredite"
-**Branch:** `dev` · **PR:** #23 · **Status:** Open
+**Branch:** `dev` · **PR:** #23 · **Status:** Merged
 
 **What and why:** The orange three-bar icon is the "E" of the Excredite logo. On the sign-in page's green panel it was followed by the full word "Excredite", so it read "E Excredite".
 

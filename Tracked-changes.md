@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Import tool: file name decides the document type
-**Branch:** `dev` · **PR:** not yet · **Status:** Open
+**Branch:** `dev` · **PR:** #17 · **Status:** Open
 
 **What and why:** The 5-file test import worked: 5 documents, 108 passages, all with search vectors, and search returns them for a signed-in staff member. But "Draft MOU" and "draft.Presentation to ASR Parties" were filed as **Regulatory order**, because their folder, "African School of Regulation", contains the word "regulation". In this collection, folders are mostly client or project names, not document types.
 

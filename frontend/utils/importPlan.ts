@@ -55,7 +55,7 @@ Options:
   --report FILE           Where to write the report (default: import-report-<time>.json).
   --help                  Show this help.
 
-Needs NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in frontend/.env.local
+Needs NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in frontend/.env.local or frontend/.env
 (not needed for --dry-run, which then can't check for files already imported).`;
 
 export function parseArgs(argv: string[]): ImportOptions {

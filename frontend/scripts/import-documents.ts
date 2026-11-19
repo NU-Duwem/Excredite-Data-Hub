@@ -286,15 +286,19 @@ async function main() {
     return;
   }
 
+  // Same files as the website (Next.js): .env.local wins over .env.
   loadEnvFile(resolve('.env.local'));
+  loadEnvFile(resolve('.env'));
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if ((!opts.dryRun || opts.addOriginals) && (!url || !key)) {
+    const missing = [!url && 'NEXT_PUBLIC_SUPABASE_URL', !key && 'SUPABASE_SERVICE_ROLE_KEY'].filter(Boolean).join(' and ');
+    console.error(`Missing ${missing}. Put it in frontend/.env.local or frontend/.env, and run this from the frontend folder (now in: ${process.cwd()}).`);
     if (opts.addOriginals) {
-      console.error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (in frontend/.env.local): --add-originals looks documents up in the library, even with --dry-run.');
+      console.error('--add-originals looks documents up in the library, so it needs these even with --dry-run.');
       process.exit(2);
     }
-    console.error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (in frontend/.env.local) to import. Use --dry-run to measure without them.');
+    console.error('Use --dry-run to measure without them.');
     process.exit(2);
   }
   const db = createClient(url || 'http://localhost', key || 'dry-run', { auth: { persistSession: false } });

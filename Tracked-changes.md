@@ -16,6 +16,27 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Sample matters: "B. Ekpo" is Eyo Ekpo; placeholder "J. Doe" removed
+**Branch:** `dev` · **PR:** #24 · **Status:** Open
+
+**What and why:** The name rule (`24_names_without_titles.sql`) leaves single letters alone, because they're usually initials. But the "B." in the lead counsel "B. Ekpo" stood for Barrister. Both entries come from the dummy sample matters in `05_db_updates.sql`.
+
+**Changes:**
+- **"DISCO Tariff Dispute case" (LIT/2025/08) and "Egbin Thermal Contractual Dispute" (APP/2026/01):** the lead is now Eyo Ekpo, linked to Eyo's staff account (`lead_user_id`), so the work board shows Eyo's name and photo.
+- **"Compliance audit matter" (REG/2025/12):** the placeholder lead "J. Doe" was cleared.
+- **`05_db_updates.sql`:** updated to match, so a fresh setup doesn't bring them back.
+
+**Files:** `05_db_updates.sql`, `Tracked-changes.md`.
+
+**Manual steps:** None. The live database was updated directly.
+
+**Testing:**
+- Live database: the two matters show "Eyo Ekpo", linked to the account.
+- The compliance matter has no lead.
+- No lead counsel or staff name in the database has a title or a placeholder.
+
+---
+
 ## 2026-11-19 · Users' names without titles (Mr, Mrs, Dr, Barr, Engr, …)
 **Branch:** `dev` · **PR:** #24 · **Status:** Open
 

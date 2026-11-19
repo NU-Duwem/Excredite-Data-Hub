@@ -172,7 +172,7 @@ function DocumentsContent() {
   const [uploadProgress, setUploadProgress] = useState<'idle' | 'uploading' | 'success' | 'error' | 'duplicate'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
   // The last successful upload: shown as a confirmation panel that follows processing.
-  const [lastUpload, setLastUpload] = useState<{ id: string; title: string; fileName: string; size: number } | null>(null);
+  const [lastUpload, setLastUpload] = useState<{ id: string; title: string; fileName: string; size: number; hidden?: boolean } | null>(null);
   const [duplicateDocMatch, setDuplicateDocMatch] = useState<Document | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -377,6 +377,11 @@ function DocumentsContent() {
 
       if (updatedDocs && updatedDocs.length > 0) {
         setDocuments(updatedDocs);
+        // Failed documents are visible to admins only, so a non-admin's upload that
+        // fails drops out of the list: show that as a failure, not endless "preparing".
+        setLastUpload(prev =>
+          prev && !prev.hidden && !updatedDocs.some(d => d.id === prev.id) ? { ...prev, hidden: true } : prev,
+        );
         if (selectedDoc) {
           const fresh = updatedDocs.find(d => d.id === selectedDoc.id);
           if (fresh) setSelectedDoc(fresh);
@@ -846,7 +851,7 @@ function DocumentsContent() {
           const doc = documents.find(d => d.id === lastUpload.id);
           const status = doc?.processing_status ?? 'PENDING';
           const done = status === 'COMPLETE';
-          const failed = status === 'FAILED';
+          const failed = status === 'FAILED' || !!lastUpload.hidden;
           const step = (state: 'done' | 'active' | 'todo' | 'failed', label: string, hint: string) => (
             <li className="flex items-start gap-3">
               <span aria-hidden="true" className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-sm font-bold ${
@@ -888,7 +893,11 @@ function DocumentsContent() {
 
               {failed && (
                 <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+                  {lastUpload.hidden && !doc ? (
+                    <>The file couldn&apos;t be read. Failed documents are shown to admins only, so it no longer appears in your library. An admin can see why it failed and re-process it, or you can fix the file and upload it again.</>
+                  ) : (<>
                   <strong>Why:</strong> {(() => { const why = doc?.notes || 'The file could not be processed.'; return /[.!?]$/.test(why) ? why : `${why}.`; })()} {canManage(doc ?? ({} as Document)) && !/save (it )?as \.(docx|pptx)/i.test(doc?.notes ?? '') && 'You can try again with Re-process on the document.'}
+                  </>)}
                 </p>
               )}
               {done && doc?.notes && (

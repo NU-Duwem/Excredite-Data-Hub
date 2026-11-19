@@ -16,8 +16,29 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Failed documents visible to admins only
+**Branch:** `dev` · **PR:** not yet · **Status:** Open
+
+**What and why:** As requested, documents whose processing failed are now visible to System Admins only.
+
+**Changes:**
+- **Database rule:** a new restrictive read rule on `documents` (`23_failed_documents_admin_only.sql`) hides rows with `processing_status = 'FAILED'` from everyone except `power_admin`. Because the rule is in the database, they're hidden everywhere for non-admins: the library, the Overview's counts and recent list, search and the AI, and the Drafting Desk. Their passages are hidden too, because passages are readable only when their document is. Restricted-document rules still apply on top.
+- **Upload screen:** a non-admin's own upload that fails now drops out of their library, so the upload screen would have stayed on "preparing it for the AI" for ever. It now notices this and says the file couldn't be read: failed documents are shown to admins only, and an admin can see why and re-process it, or the person can fix the file and upload it again.
+- **README:** SQL run order row 24.
+
+**Files:** `23_failed_documents_admin_only.sql` (new), `frontend/app/documents/page.tsx`, `README.md`, `Tracked-changes.md`.
+
+**Manual steps:** None. The SQL is already applied to the live database. For any other database, run `23_failed_documents_admin_only.sql`.
+
+**Testing:**
+- Live database, as each real account, rolled back afterwards: Duwem and Phillip (System Admin) see the 1 failed document (1,688 in total). Eyo, Osefan and Taiwo see 1,687, with no failed document.
+- Supabase security advisor: no new findings.
+- TypeScript is clean, and there are no new lint errors.
+
+---
+
 ## 2026-11-19 · "Extracted AI Index" tab for admins only
-**Branch:** `dev` · **PR:** #19 · **Status:** Open
+**Branch:** `dev` · **PR:** #19 · **Status:** Merged
 
 **What and why:** As requested, the **Extracted AI Index** tab in the document workspace (the raw passages the AI searches, with their page numbers) is now shown only to System Admins (`power_admin`). Everyone else sees the document preview alone, without the tab bar.
 
@@ -34,7 +55,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Document preview for text-only documents; library shows every document
-**Branch:** `dev` · **PR:** #19 · **Status:** Open
+**Branch:** `dev` · **PR:** #19 · **Status:** Merged
 
 **What and why:** After the import, the document preview stopped working. Two causes:
 - **Empty preview:** the page loaded a document's text only when its original file was stored. Every imported document is text only, so the preview was blank.

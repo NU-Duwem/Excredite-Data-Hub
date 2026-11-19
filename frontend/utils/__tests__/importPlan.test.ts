@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { estimateDbBytes, formatBytes, formatDuration, guessDocumentType, parseArgs, storagePath, titleFromFileName } from '../importPlan';
+import { estimateDbBytes, formatBytes, formatDuration, guessDocumentType, isSpreadsheet, parseArgs, storagePath, titleFromFileName } from '../importPlan';
 
 describe('parseArgs', () => {
   it('uses safe defaults', () => {
     expect(parseArgs(['C:\\Docs'])).toMatchObject({
-      folder: 'C:\\Docs', dryRun: false, limit: null, classification: 'INTERNAL', type: null, restricted: false, textOnly: false, uploadedBy: 'bulk-import',
+      folder: 'C:\\Docs', dryRun: false, limit: null, classification: 'INTERNAL', type: null, restricted: false, textOnly: false, skipSpreadsheets: false, addOriginals: false, uploadedBy: 'bulk-import',
     });
   });
 
@@ -12,6 +12,12 @@ describe('parseArgs', () => {
     expect(
       parseArgs(['docs', '--dry-run', '--limit', '5', '--classification', 'legal-privileged', '--type', 'court judgment', '--restricted', '--text-only', '--uploaded-by', 'ada@example.com', '--report', 'r.json']),
     ).toMatchObject({ dryRun: true, limit: 5, classification: 'LEGAL_PRIVILEGED', type: 'COURT_JUDGMENT', restricted: true, textOnly: true, uploadedBy: 'ada@example.com', report: 'r.json' });
+  });
+
+  it('reads the spreadsheet and originals options', () => {
+    expect(parseArgs(['docs', '--text-only', '--skip-spreadsheets'])).toMatchObject({ textOnly: true, skipSpreadsheets: true, addOriginals: false });
+    expect(parseArgs(['docs', '--add-originals', '--dry-run'])).toMatchObject({ addOriginals: true, dryRun: true });
+    expect(() => parseArgs(['docs', '--add-originals', '--text-only'])).toThrow('--add-originals');
   });
 
   it('rejects mistakes with a clear message', () => {
@@ -49,6 +55,13 @@ describe('naming and types', () => {
     expect(storagePath(hash, 'Tariff Order (final) 2024.pdf')).toBe(`imports/${'a'.repeat(16)}/Tariff_Order_final_2024.pdf`);
     expect(storagePath(hash, '../../etc/passwd')).toBe(`imports/${'a'.repeat(16)}/.._.._etc_passwd`);
     expect(storagePath(hash, '???')).toBe(`imports/${'a'.repeat(16)}/file`);
+  });
+});
+
+describe('spreadsheets', () => {
+  it('recognises spreadsheet files', () => {
+    for (const n of ['Readings.xlsx', 'old.XLS', 'macro.xlsm', 'data.csv']) expect(isSpreadsheet(n)).toBe(true);
+    for (const n of ['order.pdf', 'memo.docx', 'deck.pptx', 'notes.txt', 'xlsx-guide.pdf']) expect(isSpreadsheet(n)).toBe(false);
   });
 });
 

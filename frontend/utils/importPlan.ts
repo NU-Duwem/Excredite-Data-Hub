@@ -24,6 +24,8 @@ export type ImportOptions = {
   type: string | null; // null = guess from the file name
   restricted: boolean;
   textOnly: boolean;
+  skipSpreadsheets: boolean;
+  addOriginals: boolean;
   uploadedBy: string;
   report: string | null;
   help: boolean;
@@ -43,6 +45,12 @@ Options:
   --restricted            Mark imported documents Restricted (admins and people they choose).
   --text-only             Don't upload the original files: saves storage, but the
                           library can't show or download them.
+  --skip-spreadsheets     Leave out spreadsheets (.xlsx, .xls, .xlsm, .csv). Data
+                          tables use a lot of database space and help search little.
+  --add-originals         After a --text-only import (e.g. on a bigger Supabase plan):
+                          upload the original files for documents already in the
+                          library, matched by content. Text and search are untouched.
+                          Combine with --dry-run to see what would be added.
   --uploaded-by EMAIL     Recorded as the uploader (default: bulk-import).
   --report FILE           Where to write the report (default: import-report-<time>.json).
   --help                  Show this help.
@@ -59,6 +67,8 @@ export function parseArgs(argv: string[]): ImportOptions {
     type: null,
     restricted: false,
     textOnly: false,
+    skipSpreadsheets: false,
+    addOriginals: false,
     uploadedBy: 'bulk-import',
     report: null,
     help: false,
@@ -74,6 +84,8 @@ export function parseArgs(argv: string[]): ImportOptions {
       case '--dry-run': opts.dryRun = true; break;
       case '--restricted': opts.restricted = true; break;
       case '--text-only': opts.textOnly = true; break;
+      case '--skip-spreadsheets': opts.skipSpreadsheets = true; break;
+      case '--add-originals': opts.addOriginals = true; break;
       case '--help': case '-h': opts.help = true; break;
       case '--limit': {
         const n = Number(value(i, a));
@@ -99,7 +111,13 @@ export function parseArgs(argv: string[]): ImportOptions {
     }
   }
   if (!opts.folder && !opts.help) throw new Error('Say which folder to import');
+  if (opts.addOriginals && opts.textOnly) throw new Error('--add-originals uploads the originals, so it can’t be used with --text-only');
   return opts;
+}
+
+/** Spreadsheet files, left out by --skip-spreadsheets. */
+export function isSpreadsheet(name: string): boolean {
+  return /\.(xlsx|xls|xlsm|csv)$/i.test(name);
 }
 
 /** A readable title from a file name: no extension, underscores/dashes as spaces. */

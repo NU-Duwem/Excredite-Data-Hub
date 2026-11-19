@@ -48,6 +48,15 @@ describe('naming and types', () => {
     expect(guessDocumentType('Board minutes.docx')).toBe('DOCUMENT_NOTE');
     expect(guessDocumentType('photo.pdf')).toBe('OTHER');
     expect(guessDocumentType('Recorder settings.pdf')).toBe('OTHER'); // "order" inside a word doesn't count
+    expect(guessDocumentType('Meter Reading Regulations 2024.pdf')).toBe('REGULATORY_ORDER');
+  });
+
+  it('lets the file name decide before the folder names', () => {
+    expect(guessDocumentType('African School of Regulation\\Draft MOU.docx')).toBe('OTHER');
+    expect(guessDocumentType('African School of Regulation\\draft.Presentation to ASR Parties.pptx')).toBe('OTHER');
+    expect(guessDocumentType('Court cases/Statement of claim.docx')).toBe('COURT_JUDGMENT');
+    expect(guessDocumentType('Court cases/Legal opinion.docx')).toBe('LEGAL_BRIEF');
+    expect(guessDocumentType('Tariff orders\\2024\\scan 03.pdf')).toBe('TARIFF_DETERMINATION');
   });
 
   it('builds safe storage paths grouped by content hash', () => {

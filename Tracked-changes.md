@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Import tool: leave out spreadsheets; add originals later
-**Branch:** `dev` · **PR:** none yet · **Status:** Open
+**Branch:** `dev` · **PR:** #14 · **Status:** Open
 
 **What and why:** The dry run of "Eyo Ekpo – Documents" (2,672 files) found:
 - 1,863 files ready, making about 80,000 passages, an estimated 395 MB of database space and 2.1 GB of originals;

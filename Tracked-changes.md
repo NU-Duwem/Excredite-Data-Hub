@@ -16,8 +16,21 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Remove the "Text only" note from the document preview
+**Branch:** `dev` · **PR:** not yet · **Status:** Open
+
+**What and why:** As requested, the note above text-only previews ("Text only: the original file wasn't stored, so this shows the text the AI reads. Layout, images and tables aren't shown.") is removed. The preview now shows the document text straight away.
+
+**Files:** `frontend/app/documents/page.tsx`, `Tracked-changes.md`.
+
+**Manual steps:** None (restart or redeploy the website).
+
+**Testing:** TypeScript is clean, and there are no new lint errors.
+
+---
+
 ## 2026-11-19 · Failed documents visible to admins only
-**Branch:** `dev` · **PR:** #20 · **Status:** Open
+**Branch:** `dev` · **PR:** #20 · **Status:** Merged
 
 **What and why:** As requested, documents whose processing failed are now visible to System Admins only.
 

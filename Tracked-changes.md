@@ -16,8 +16,38 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Regulatory & Advisory: delete tasks from the board, or clear a column
+**Branch:** `dev` · **PR:** #26 · **Status:** Open
+
+**What and why:** As requested, tasks on the Regulatory & Advisory board can be deleted one at a time, or a whole list can be cleared. Before, the only way was to open a task and choose Delete inside it.
+
+**Changes:**
+- **Single task:** each task card has a bin button in its top-right corner. On a computer it appears when you point at or tab to the card; on a phone it's always shown. It asks "Delete this task?" before deleting.
+- **Clear a column:** each column header has a **Clear** button when the column has tasks. It asks "Clear To do?", with the count, before deleting every task the column shows.
+  - It's on every column (To do, In progress, In review, Done), not only To do, so finished work in Done can be cleared the same way.
+  - If filters are on (a single job, My tasks, a due date), only the tasks shown are deleted. The dialog says so, and tasks hidden by the filters are kept.
+- **Confirmation:** both use the same dialog, with "Keep it/them" and a red "Delete" button. It says the deletion is for everyone and can't be undone.
+- **Who sees the buttons:** only people who can work on tasks (admins, legal staff, and those given access, such as Taiwo). The database already allowed exactly these people to delete, so no SQL change was needed.
+- **Reporting:** if the database deletes fewer tasks than asked, the page says how many were deleted.
+- **Column headers:** all the same height now, with or without the Clear button.
+
+**Files:** `frontend/app/matters/page.tsx`, `Tracked-changes.md`.
+
+**Manual steps:** None.
+
+**Testing:**
+- Browser check against fake data with 10 to-do tasks and 2 done tasks:
+  - deleting one task, then "Keep it", leaves 10;
+  - "Delete task" leaves 9, with "Task deleted.";
+  - Clear To do asks to delete 9, then leaves To do empty while Done keeps its 2, with "9 tasks deleted.";
+  - the fake database received deletes for exactly 1 and 9 tasks;
+  - as a read-only user (CEO role), no delete or Clear buttons show.
+- TypeScript is clean, and there are no new lint errors.
+
+---
+
 ## 2026-11-19 · Regulatory & Advisory: task columns scroll
-**Branch:** `dev` · **PR:** #25 · **Status:** Open
+**Branch:** `dev` · **PR:** #25 · **Status:** Merged
 
 **What and why:** As requested, the To-Do list on the Regulatory & Advisory task board needed a scroll bar. Unlike the other pages, this page wasn't allowed to scroll, so tasks below the bottom of the screen were cut off and couldn't be reached.
 

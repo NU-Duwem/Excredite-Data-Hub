@@ -6,6 +6,7 @@ import { createClient } from '@/utils/supabase/client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import AccessDialog from './AccessDialog';
 import DraftingDesk from './DraftingDesk';
+import { passagesToSections } from '@/utils/passages';
 
 interface Document {
   id: string;
@@ -46,6 +47,27 @@ const DOC_TYPES = [
   { value: 'DOCUMENT_NOTE', label: 'Document Note' },
   { value: 'OTHER', label: 'Other (specify)' },
 ];
+
+/**
+ * Every document row, newest first. The database returns at most 1,000 rows per
+ * request, so the list is read in pages (the library now holds well over 1,000).
+ */
+async function fetchAllDocuments(supabase: SupabaseClient) {
+  const PAGE = 1000;
+  const all: Document[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) return { data: null, error };
+    all.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+  return { data: all, error: null };
+}
 
 function NativeDocxViewer({ url }: { url: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -296,38 +318,38 @@ function DocumentsContent() {
     }
   };
 
-  // Fetch document signed URL and extracted text chunks whenever selectedDoc changes
+  // Fetch the extracted text (every document) and a signed URL for the original (only when it was stored).
+  // Imported documents are often text only, with no original file.
   useEffect(() => {
-    if (selectedDoc?.s3_key) {
-      const fetchSignedUrlAndChunks = async () => {
-        // 1. Get signed URL for private bucket compatibility
-        const { data: signedData } = await supabase.storage
-          .from('documents')
-          .createSignedUrl(selectedDoc.s3_key!, 3600);
-
-        if (signedData?.signedUrl) {
-          setDocFileUrl(signedData.signedUrl);
-        } else {
-          const { data: pubData } = supabase.storage.from('documents').getPublicUrl(selectedDoc.s3_key!);
-          setDocFileUrl(pubData.publicUrl);
-        }
-
-        // 2. Fetch extracted chunks
-        setChunksLoading(true);
-        const { data: chunks } = await supabase
-          .from('embeddings')
-          .select('chunk_index, chunk_text, metadata')
-          .eq('document_id', selectedDoc.id)
-          .order('chunk_index', { ascending: true });
-        
-        setDocChunks(chunks || []);
-        setChunksLoading(false);
-      };
-      fetchSignedUrlAndChunks();
-    } else {
+    if (!selectedDoc) {
       setDocFileUrl(null);
       setDocChunks([]);
+      return;
     }
+    let cancelled = false;
+    const load = async () => {
+      setDocFileUrl(null);
+      setChunksLoading(true);
+      if (selectedDoc.s3_key) {
+        const { data: signedData } = await supabase.storage
+          .from('documents')
+          .createSignedUrl(selectedDoc.s3_key, 3600);
+        if (!cancelled && signedData?.signedUrl) setDocFileUrl(signedData.signedUrl);
+      }
+      const { data: chunks } = await supabase
+        .from('embeddings')
+        .select('chunk_index, chunk_text, metadata')
+        .eq('document_id', selectedDoc.id)
+        .order('chunk_index', { ascending: true })
+        .limit(5000);
+      if (cancelled) return;
+      setDocChunks(chunks || []);
+      setChunksLoading(false);
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedDoc, supabase]);
 
   // Get user role
@@ -351,10 +373,7 @@ function DocumentsContent() {
     if (!hasPending) return;
 
     const interval = setInterval(async () => {
-      const { data: updatedDocs } = await supabase
-        .from('documents')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: updatedDocs } = await fetchAllDocuments(supabase);
 
       if (updatedDocs && updatedDocs.length > 0) {
         setDocuments(updatedDocs);
@@ -423,11 +442,8 @@ function DocumentsContent() {
   useEffect(() => {
     const fetchDocs = async () => {
       setDocsLoading(true);
-      const { data, error } = await supabase
-        .from('documents')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
+      const { data, error } = await fetchAllDocuments(supabase);
+
       if (!error && data) {
         setDocuments(data);
         // ?doc=<id> (e.g. from the Overview) opens that document.
@@ -1423,12 +1439,13 @@ function DocumentsContent() {
                               <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                               </svg>
-                              <span style={{ color: '#ffffff' }} className="text-white font-black tracking-wider">Download Original File</span>
+                              <span style={{ color: '#ffffff' }} className="text-white font-black tracking-wider">{selectedDoc.s3_key ? 'Download Original File' : 'Download Text'}</span>
                             </a>
                           </div>
                         </div>
 
-                        {/* Workspace Tab Bar: Visual Document Preview vs Extracted AI Chunks */}
+                        {/* Workspace Tab Bar: Visual Document Preview vs Extracted AI Chunks (admins only) */}
+                        {isAdmin && (
                         <div className="flex border-b border-gray-200 gap-6 pt-1">
                           <button
                             onClick={() => setViewerTab('preview')}
@@ -1449,9 +1466,10 @@ function DocumentsContent() {
                             Extracted AI Index ({docChunks.length})
                           </button>
                         </div>
+                        )}
 
-                        {/* TAB 1: VISUAL DOCUMENT PREVIEW */}
-                        {viewerTab === 'preview' && (
+                        {/* TAB 1: VISUAL DOCUMENT PREVIEW (the only view for non-admins) */}
+                        {(viewerTab === 'preview' || !isAdmin) && (
                           <div className="w-full min-h-[520px] bg-gray-100/70 rounded-xl overflow-hidden border border-gray-200 shadow-inner flex flex-col justify-center items-center">
                             {selectedDoc ? (
                               (() => {
@@ -1498,11 +1516,33 @@ function DocumentsContent() {
                                   );
                                 }
 
+                                if (chunksLoading) {
+                                  return <div className="py-12 text-center text-xs text-gray-400">Loading the document text…</div>;
+                                }
+                                const sections = passagesToSections(docChunks);
                                 return (
-                                  <div className="w-full h-[540px] bg-white p-6 overflow-y-auto font-mono text-xs text-gray-800 space-y-2 border border-gray-200 rounded-xl">
-                                    {docChunks.map((c, i) => (
-                                      <p key={i} className="whitespace-pre-wrap">{c.chunk_text}</p>
-                                    ))}
+                                  <div className="w-full h-[540px] flex flex-col bg-white border border-gray-200 rounded-xl overflow-hidden">
+                                    {!selectedDoc.s3_key && (
+                                      <div className="px-5 py-2.5 text-[11px] text-gray-600 bg-gray-50 border-b border-gray-200">
+                                        Text only: the original file wasn&apos;t stored, so this shows the text the AI reads. Layout, images and tables aren&apos;t shown.
+                                      </div>
+                                    )}
+                                    <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                                      {sections.length === 0 ? (
+                                        <p className="text-xs text-gray-400 text-center py-12">
+                                          No text was found in this document. It may be a scanned copy that needs OCR.
+                                        </p>
+                                      ) : (
+                                        sections.map((sec, i) => (
+                                          <section key={i}>
+                                            {sec.label && (
+                                              <h4 className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1.5">{sec.label}</h4>
+                                            )}
+                                            <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-gray-800">{sec.text}</p>
+                                          </section>
+                                        ))
+                                      )}
+                                    </div>
                                   </div>
                                 );
                               })()
@@ -1514,8 +1554,8 @@ function DocumentsContent() {
                           </div>
                         )}
 
-                        {/* TAB 2: EXTRACTED AI CHUNKS */}
-                        {viewerTab === 'chunks' && (
+                        {/* TAB 2: EXTRACTED AI CHUNKS (admins only) */}
+                        {isAdmin && viewerTab === 'chunks' && (
                           <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 max-h-[500px] overflow-y-auto">
                             <div className="flex justify-between items-center pb-3 border-b border-gray-100">
                               <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide">Extracted Document Text Chunks</h4>

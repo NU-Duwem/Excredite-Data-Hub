@@ -16,8 +16,58 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · "Extracted AI Index" tab for admins only
+**Branch:** `dev` · **PR:** #19 · **Status:** Open
+
+**What and why:** As requested, the **Extracted AI Index** tab in the document workspace (the raw passages the AI searches, with their page numbers) is now shown only to System Admins (`power_admin`). Everyone else sees the document preview alone, without the tab bar.
+
+**Note:** This hides the tab; it doesn't change database access. Staff who can see a document can still read its text through the preview, and the AI uses the passages to answer them.
+
+**Files:** `frontend/app/documents/page.tsx`, `Tracked-changes.md`.
+
+**Manual steps:** None (restart or redeploy the website).
+
+**Testing:**
+- TypeScript is clean, and there are no new lint errors.
+- Browser check against a fake Supabase: as an admin the tab shows; as an analyst it doesn't, and the preview still shows the document text.
+
+---
+
+## 2026-11-19 · Document preview for text-only documents; library shows every document
+**Branch:** `dev` · **PR:** #19 · **Status:** Open
+
+**What and why:** After the import, the document preview stopped working. Two causes:
+- **Empty preview:** the page loaded a document's text only when its original file was stored. Every imported document is text only, so the preview was blank.
+- **Short list:** the library asked for all documents in one request, but the database returns at most 1,000 rows per request. With 1,688 documents, the oldest 688 were missing from the list.
+
+The re-run of the import loaded 3 more files: the two Akwa Ibom Summit PDFs and the NDPHC Rejoinder. "Annexure 2.Annual Report 2020" timed out while saving its 423 passages.
+
+**Changes:**
+- **Preview loading:** the text is now loaded for every document. The signed link to the original is requested only when an original exists.
+- **Text-only preview:** reads as a document. Passages are joined without their 200-character overlaps and grouped under Page / Slide / Sheet headings, under a note that the original wasn't stored. Scanned documents with no text say they need OCR.
+- **Text download:** for text-only documents the button says **Download Text**, and the download uses the same clean text with page headings instead of repeated passages separated by `---`.
+- **Library list:** read in pages of 1,000, so every document appears.
+- **Import tool:** saves passages 50 at a time instead of 200, and retries a batch up to 3 times, to avoid the database's statement timeout.
+
+**Files:** `frontend/utils/passages.ts` (new), `frontend/utils/__tests__/passages.test.ts` (new), `frontend/app/documents/page.tsx`, `frontend/app/api/documents/[id]/download/route.ts`, `frontend/scripts/import-documents.ts`, `Tracked-changes.md`.
+
+**Manual steps:**
+- Run `git pull`.
+- Restart the website (or redeploy) to see the preview fix.
+- Run the import command once more for "Annexure 2.Annual Report 2020".
+
+**Testing:**
+- Vitest: 259 passing and 1 skipped. New tests rebuild the original text from real overlapping chunks, and check grouping by page, slide and sheet.
+- TypeScript is clean, and there are no new lint errors.
+- Browser check against a fake Supabase with 1,203 text-only documents:
+  - the list shows 1,203, fetched in two pages;
+  - the preview shows the text-only note and the Page 1 and Page 2 headings, with each of 30 paragraphs once;
+  - the text download has page headings and no repeats.
+
+---
+
 ## 2026-11-19 · Import tool: clean text before saving; re-runs replace failed attempts
-**Branch:** `dev` · **PR:** #18 · **Status:** Open
+**Branch:** `dev` · **PR:** #18 · **Status:** Merged
 
 **What and why:** The full import of "Eyo Ekpo – Documents" finished in 5 hours:
 - **Imported:** 1,674 files and 52,985 passages, about 242 MB of the 500 MB Free-plan database.

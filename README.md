@@ -106,6 +106,7 @@ Run these files in the Supabase **SQL Editor**, in this order. Each one is safe 
 | 20 | `19_temporary_passwords.sql` | One-time temporary passwords for a person's first sign-in (hashed, expire, lock after 5 wrong tries) |
 | 21 | `20_matter_access.sql` | Per-person access to Regulatory & Advisory Matters: see everything and work on tasks (first grant: Taiwo) |
 | 22 | `21_drafting.sql` | Drafting Desk: private autosaved drafts and shared workflows |
+| 23 | `22_document_file_hash.sql` | Adds `documents.file_hash` (if missing) so uploads and the import tool can skip duplicate files |
 
 **After running the SQL:**
 - Deploy the edge functions with the [Supabase CLI](https://supabase.com/docs/guides/cli):

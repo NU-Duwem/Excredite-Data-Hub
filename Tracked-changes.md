@@ -16,8 +16,41 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Import tool: clean text before saving; re-runs replace failed attempts
+**Branch:** `dev` · **PR:** #18 · **Status:** Open
+
+**What and why:** The full import of "Eyo Ekpo – Documents" finished in 5 hours:
+- **Imported:** 1,674 files and 52,985 passages, about 242 MB of the 500 MB Free-plan database.
+- **Skipped as duplicates:** 417.
+- **Needs OCR:** 213.
+- **Unsupported:** 178.
+- **Spreadsheets left out:** 182.
+- **Failed:** 8.
+
+Three of the 8 failures came from the text itself:
+- two PDFs contain NUL characters, which the database refuses ("unsupported Unicode escape sequence");
+- one PDF had half of a character pair left at a passage boundary ("invalid input syntax for type json").
+
+Those three documents were left behind as FAILED rows with no passages.
+
+**Changes:**
+- **Cleaner text:** a new `cleanForDatabase()` removes NUL and other control characters and broken character pairs from every passage. It's part of `toChunks()`, so uploads through the website get it too.
+- **Duplicate check:** finds a COMPLETE copy even when an earlier failed row for the same file exists.
+- **Retries:** before importing a file, the tool removes any FAILED or PROCESSING row for the same file (and its passages), so a re-run replaces a failed attempt instead of leaving a second row.
+
+**Files:** `frontend/utils/extractText.ts`, `frontend/utils/__tests__/extractText.test.ts`, `frontend/scripts/import-documents.ts`, `Tracked-changes.md`.
+
+**Manual steps:** `git pull`, then run the same import command again. Files already imported are skipped, and the 3 failed documents and the 2 that hit network errors are retried.
+
+**Testing:**
+- Vitest: 256 passing and 1 skipped. New tests cover NUL characters, broken character pairs, and chunks cut through an emoji.
+- TypeScript and ESLint are clean.
+- Live database: checked the totals against the report (1,687 documents, 53,155 passages), and found the 3 FAILED rows with no passages.
+
+---
+
 ## 2026-11-19 · Import tool: file name decides the document type
-**Branch:** `dev` · **PR:** #17 · **Status:** Open
+**Branch:** `dev` · **PR:** #17 · **Status:** Merged
 
 **What and why:** The 5-file test import worked: 5 documents, 108 passages, all with search vectors, and search returns them for a signed-in staff member. But "Draft MOU" and "draft.Presentation to ASR Parties" were filed as **Regulatory order**, because their folder, "African School of Regulation", contains the word "regulation". In this collection, folders are mostly client or project names, not document types.
 

@@ -16,8 +16,31 @@ This file records every change made to the project, newest first. It covers the 
 
 ---
 
+## 2026-11-19 · Import tool reads .env as well as .env.local
+**Branch:** `dev` · **PR:** #15 · **Status:** Open
+
+**What and why:** Your first real test import stopped with "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set", although both were set. They were in `frontend/.env`, which the website reads but the import tool didn't.
+
+**Changes:**
+- The tool now reads `frontend/.env.local` and then `frontend/.env`, like the website, with `.env.local` taking priority.
+- When a setting is missing, the error names which one, and shows the folder the tool was run from.
+- The `--help` text mentions both files.
+
+**Files:** `frontend/scripts/import-documents.ts`, `frontend/utils/importPlan.ts`, `Tracked-changes.md`.
+
+**Manual steps:** none. Until this is merged, renaming `frontend/.env` to `frontend/.env.local` also works.
+
+**Testing:**
+- **Type check:** TypeScript is clean.
+- **Real runs, each in a fresh folder:**
+  - no settings file: both settings named as missing;
+  - `.env` with only the URL: only the key named as missing;
+  - `.env` with both, using Windows line endings and quoted values: the import starts.
+
+---
+
 ## 2026-11-19 · Import tool: leave out spreadsheets; add originals later
-**Branch:** `dev` · **PR:** #14 · **Status:** Open
+**Branch:** `dev` · **PR:** #14 · **Status:** Merged
 
 **What and why:** The dry run of "Eyo Ekpo – Documents" (2,672 files) found:
 - 1,863 files ready, making about 80,000 passages, an estimated 395 MB of database space and 2.1 GB of originals;

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findVisibleDocument, getSession } from '@/utils/documentAccess';
+import { passagesToSections } from '@/utils/passages';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -69,12 +70,14 @@ export async function GET(
     // 4. Fallback: If s3_key is missing or direct storage download fails, stream text chunks as plain text file
     const { data: chunks } = await adminClient
       .from('embeddings')
-      .select('chunk_text')
+      .select('chunk_index, chunk_text, metadata')
       .eq('document_id', documentId)
-      .order('chunk_index', { ascending: true });
+      .order('chunk_index', { ascending: true })
+      .limit(5000);
 
-    const fullText = (chunks && chunks.length > 0) 
-      ? chunks.map(c => c.chunk_text).join('\n\n---\n\n') 
+    // Passages overlap; rebuild the text once, with page/slide headings.
+    const fullText = (chunks && chunks.length > 0)
+      ? passagesToSections(chunks).map((sec) => (sec.label ? `[${sec.label}]\n${sec.text}` : sec.text)).join('\n\n')
       : `${doc.title}\nDocument Type: ${doc.document_type}\nCreated At: ${doc.created_at}`;
 
     const textBuffer = Buffer.from(fullText, 'utf-8');

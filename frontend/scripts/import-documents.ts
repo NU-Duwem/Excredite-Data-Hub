@@ -91,6 +91,8 @@ async function listFiles(dir: string): Promise<string[]> {
   return out;
 }
 
+const CHUNK_BATCH = 50;
+
 async function alreadyImported(db: SupabaseClient, hash: string): Promise<string | null> {
   const { data, error } = await db.from('documents').select('id, processing_status').eq('file_hash', hash);
   if (error) throw new Error(`Checking for duplicates failed: ${error.message}`);
@@ -225,8 +227,14 @@ async function importOne(db: SupabaseClient, opts: ImportOptions, root: string, 
       ...(c.sheet_name ? { sheet_name: c.sheet_name } : {}),
     },
   }));
-  for (let i = 0; i < rows.length; i += 200) {
-    const { error } = await db.from('embeddings').insert(rows.slice(i, i + 200));
+  // Small batches, each tried up to 3 times: large ones can hit the database's statement timeout.
+  for (let i = 0; i < rows.length; i += CHUNK_BATCH) {
+    let error: { message: string } | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      ({ error } = await db.from('embeddings').insert(rows.slice(i, i + CHUNK_BATCH)));
+      if (!error) break;
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
     if (error) {
       await db.from('documents').update({ processing_status: 'FAILED', notes: `Saving chunks failed: ${error.message}`.slice(0, 1000) }).eq('id', doc.id);
       return { ...result, note: `Saving chunks failed: ${error.message}` };

@@ -103,6 +103,16 @@ code, kbd, samp, pre {
 .scroll-panel::-webkit-scrollbar-thumb:hover {
   background: var(--color-gray-400);
 }
+/* Darker thumb for panels on a tinted background (e.g. the task board columns). */
+.scroll-panel-strong {
+  scrollbar-color: var(--color-gray-400) transparent;
+}
+.scroll-panel-strong::-webkit-scrollbar-thumb {
+  background: var(--color-gray-400);
+}
+.scroll-panel-strong::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gray-500);
+}
 
 /* Responsive Word Document (.docx) Reader Styling - Prevents Text Clipping */
 .docx-wrapper {

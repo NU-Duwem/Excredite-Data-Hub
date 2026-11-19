@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Regulatory & Advisory: task columns scroll
-**Branch:** `dev` · **PR:** not yet · **Status:** Open
+**Branch:** `dev` · **PR:** #25 · **Status:** Open
 
 **What and why:** As requested, the To-Do list on the Regulatory & Advisory task board needed a scroll bar. Unlike the other pages, this page wasn't allowed to scroll, so tasks below the bottom of the screen were cut off and couldn't be reached.
 

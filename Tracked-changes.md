@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Sign-in page: logo reads "Excredite", not "E Excredite"
-**Branch:** `dev` · **PR:** not yet · **Status:** Open
+**Branch:** `dev` · **PR:** #23 · **Status:** Open
 
 **What and why:** The orange three-bar icon is the "E" of the Excredite logo. On the sign-in page's green panel it was followed by the full word "Excredite", so it read "E Excredite".
 

@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Import tool reads .env as well as .env.local
-**Branch:** `dev` · **PR:** none yet · **Status:** Open
+**Branch:** `dev` · **PR:** #15 · **Status:** Open
 
 **What and why:** Your first real test import stopped with "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set", although both were set. They were in `frontend/.env`, which the website reads but the import tool didn't.
 

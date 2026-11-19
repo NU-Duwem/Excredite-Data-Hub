@@ -272,7 +272,7 @@ export default function Sidebar() {
       <div className={`flex items-center ${collapsed ? 'justify-center px-2 pt-5 pb-3' : 'justify-between px-5 pt-5 pb-3'} gap-2`}>
         <Link href="/" className="flex flex-col min-w-0" aria-label="Excredite Electricity Data Hub — Overview">
           {collapsed ? (
-            <Image src="/excredite-mark.png" alt="" width={40} height={40} className="h-10 w-10" priority />
+            <Image src="/excredite-e.png" alt="" width={40} height={38} className="h-auto w-10" priority />
           ) : (
             <Image src="/excredite-wordmark.png" alt="" width={140} height={27} className="h-auto w-[140px]" priority />
           )}

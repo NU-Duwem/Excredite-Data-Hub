@@ -17,7 +17,7 @@ This file records every change made to the project, newest first. It covers the 
 ---
 
 ## 2026-11-19 · Excredite logo as the site icon (favicon)
-**Branch:** `dev` · **PR:** not yet · **Status:** Open
+**Branch:** `dev` · **PR:** #22 · **Status:** Open
 
 **What and why:** The browser tab still showed Next.js's default icon (a black triangle). As requested, the site icon is now the Excredite logo mark: the orange "E" of three bars.
 
